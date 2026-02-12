@@ -28,13 +28,11 @@
     input, select { width: 100%; padding: 8px 10px; border-radius: 10px; border:1px solid #e5e7eb; background:#fff; }
     button { width:100%; margin-top: 10px; padding:10px 12px; border-radius: 10px; border:1px solid #e5e7eb; background:#0f172a; color:#fff; cursor:pointer; }
     button.secondary { background:#fff; color:#0f172a; }
-    #map { height: 420px; border-radius: 12px; overflow:hidden; border:1px solid #e5e7eb; }
-    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    #map { height: 520px; border-radius: 12px; overflow:hidden; border:1px solid #e5e7eb; }
     .table { width:100%; border-collapse: collapse; font-size: 12px; }
     .table th, .table td { padding: 8px; border-bottom: 1px solid #eef2f7; text-align:left; vertical-align: top; }
     .muted { color:#64748b; font-size: 12px; }
     .errorBox { white-space: pre-wrap; background:#fff; border:1px solid #fecaca; color:#991b1b; padding: 12px; border-radius: 12px; }
-    .bar svg { width:100%; height: 360px; display:block; }
     @media (max-width: 1100px){
       .wrap { grid-template-columns: 1fr; }
       .kpis { grid-template-columns: repeat(2, minmax(120px,1fr)); }
@@ -45,7 +43,7 @@
 <body>
   <header>
     <h1>School Knowledge Base</h1>
-    <div class="muted">Public dashboard (React + D3 + Map) • Data source: <code>data.json</code></div>
+    <div class="muted">Public dashboard (React + Map) • Data source: <code>data.json</code></div>
   </header>
 
   <div id="root" class="wrap"></div>
@@ -53,7 +51,6 @@
   <script type="module">
     import React from "https://esm.sh/react@18.2.0";
     import ReactDOM from "https://esm.sh/react-dom@18.2.0/client";
-    import * as d3 from "https://esm.sh/d3@7.9.0";
 
     const el = React.createElement;
 
@@ -93,63 +90,15 @@
         ),
         el("div", { className: "card" },
           el("div", { className: "muted" },
-            "Tip: open DevTools → Console to see the full stack trace. This page is designed to avoid blank screens by showing errors here."
+            "Tip: open DevTools → Console to see the full stack trace."
           )
         )
       );
     }
 
-    function BarChart({ rows, width=800, height=360, valueKey="enrollment", labelKey="school_name" }) {
-      const ref = React.useRef(null);
-
-      React.useEffect(() => {
-        if (!ref.current) return;
-        const data = rows.slice(0, 25); // top 25 for readability
-        const margin = { top: 10, right: 10, bottom: 20, left: 180 };
-        const w = ref.current.clientWidth || width;
-        const h = height;
-
-        const svg = d3.select(ref.current);
-        svg.selectAll("*").remove();
-        svg.attr("viewBox", `0 0 ${w} ${h}`);
-
-        const x = d3.scaleLinear()
-          .domain([0, d3.max(data, d => d[valueKey] ?? 0) || 1])
-          .range([margin.left, w - margin.right]);
-
-        const y = d3.scaleBand()
-          .domain(data.map(d => d[labelKey]))
-          .range([margin.top, h - margin.bottom])
-          .padding(0.2);
-
-        svg.append("g")
-          .attr("transform", `translate(0,${h - margin.bottom})`)
-          .call(d3.axisBottom(x).ticks(5).tickSizeOuter(0));
-
-        svg.append("g")
-          .attr("transform", `translate(${margin.left},0)`)
-          .call(d3.axisLeft(y).tickSizeOuter(0))
-          .selectAll("text")
-          .style("font-size","11px");
-
-        svg.append("g")
-          .selectAll("rect")
-          .data(data)
-          .join("rect")
-          .attr("x", x(0))
-          .attr("y", d => y(d[labelKey]))
-          .attr("width", d => x(d[valueKey] ?? 0) - x(0))
-          .attr("height", y.bandwidth())
-          .attr("fill", "#1f77b4"); // OK to specify a simple default
-      }, [rows]);
-
-      return el("div", { className: "bar" }, el("svg", { ref }));
-    }
-
     function App({ raw }) {
       // Normalize: map common column name variants into standard fields
       const rows = raw.map((r, i) => {
-        // Try multiple possible names because sheets vary
         const school = toStr(r.school_name ?? r.School ?? r["School Name"] ?? r.name ?? r["Name"]);
         const enrollment = safeNum(r.enrollment ?? r.Enrollment ?? r["Total Enrollment"] ?? r["Enrollment Count"]);
         const board = toStr(r.board_district ?? r["Board District"] ?? r["Board District Number"] ?? r["School Board District"]);
@@ -204,21 +153,22 @@
 
       const totalSchools = filtered.length;
       const totalEnroll = filtered.reduce((a,r)=>a+(r.enrollment||0),0);
-      const schoolsWithBilingual = filtered.filter(r => (r.bilingual_program || "").toLowerCase().includes("yes") || (r.bilingual_program || "").toLowerCase().includes("dual") || (r.bilingual_program || "").toLowerCase().includes("bilingual")).length;
+      const schoolsWithBilingual = filtered.filter(r => {
+        const v = (r.bilingual_program || "").toLowerCase();
+        return v.includes("yes") || v.includes("dual") || v.includes("bilingual");
+      }).length;
       const uniqLangCount = uniq(filtered.flatMap(r => (r.languages_spoken||"").split(/[,;|]/g).map(s=>s.trim()).filter(Boolean))).length;
 
-      // Map init
+      // Map init/update
       React.useEffect(() => {
         const mapEl = document.getElementById("map");
         if (!mapEl) return;
 
-        // If Leaflet didn’t load, fail gracefully
         if (!window.L) {
           console.warn("Leaflet not available (L is undefined).");
           return;
         }
 
-        // Create once
         if (!window.__SKB_MAP__) {
           window.__SKB_MAP__ = window.L.map("map", { zoomControl: true }).setView([35.0844, -106.6504], 10);
           window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -235,7 +185,13 @@
         const pts = filtered.filter(r => Number.isFinite(r.latitude) && Number.isFinite(r.longitude));
         pts.forEach(r => {
           const m = window.L.circleMarker([r.latitude, r.longitude], { radius: 6, weight: 1, fillOpacity: 0.7 });
-          m.bindPopup(`<b>${r.school_name}</b><br/>Enrollment: ${r.enrollment}<br/>Board: ${r.board_district || ""}<br/>Calendar: ${r.calendar_type || ""}<br/>Bilingual: ${r.bilingual_program || ""}`);
+          m.bindPopup(
+            `<b>${r.school_name}</b><br/>` +
+            `Enrollment: ${r.enrollment}<br/>` +
+            `Board: ${r.board_district || ""}<br/>` +
+            `Calendar: ${r.calendar_type || ""}<br/>` +
+            `Bilingual: ${r.bilingual_program || ""}`
+          );
           m.on("click", () => setSelected(r));
           m.addTo(layer);
         });
@@ -245,8 +201,6 @@
           map.fitBounds(bounds.pad(0.2));
         }
       }, [q, board, calendar, bilingual, language]);
-
-      const sortedByEnroll = [...filtered].sort((a,b)=> (b.enrollment||0) - (a.enrollment||0));
 
       return el(React.Fragment, null,
         // Left sidebar
@@ -293,7 +247,7 @@
           el("button", { className:"secondary", onClick: ()=>window.print() }, "Print / Save as PDF"),
 
           el("div", { className:"muted", style:{marginTop:10} },
-            "Tip: Click a map point to select a school."
+            "Tip: Click a map point or table row to select a school."
           )
         ),
 
@@ -308,15 +262,9 @@
             )
           ),
 
-          el("div", { className:"grid2" },
-            el("div", { className:"card" },
-              el("div", { style:{fontWeight:700, marginBottom:8} }, "Top enrollments (D3)"),
-              el(BarChart, { rows: sortedByEnroll, valueKey:"enrollment", labelKey:"school_name" })
-            ),
-            el("div", { className:"card" },
-              el("div", { style:{fontWeight:700, marginBottom:8} }, "Map (OpenStreetMap)"),
-              el("div", { id:"map" })
-            )
+          el("div", { className:"card", style:{marginTop:14} },
+            el("div", { style:{fontWeight:700, marginBottom:8} }, "Map (OpenStreetMap)"),
+            el("div", { id:"map" })
           ),
 
           el("div", { className:"card", style:{marginTop:14} },
@@ -376,4 +324,3 @@
   </script>
 </body>
 </html>
-
