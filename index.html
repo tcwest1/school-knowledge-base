@@ -58,12 +58,10 @@
       const n = Number(String(x ?? "").replace(/,/g,""));
       return Number.isFinite(n) ? n : null;
     }
-
     function toStr(x) {
       if (x === null || x === undefined) return "";
       return String(x).trim();
     }
-
     function uniq(arr) {
       return Array.from(new Set(arr.filter(Boolean))).sort((a,b)=>a.localeCompare(b));
     }
@@ -97,38 +95,48 @@
     }
 
     function App({ raw }) {
-      // Normalize: map common column name variants into standard fields
+      // IMPORTANT: Column mapping aligned to your data.json keys:
+      // school_name, level, enrollment, bilingual_education_program, calendar, school_board_district, home_language_other_than_english, latitude, longitude
       const rows = raw.map((r, i) => {
         const school = toStr(r.school_name ?? r.School ?? r["School Name"] ?? r.name ?? r["Name"]);
+        const level = toStr(r.level ?? r.Level ?? r["School Level"]);
         const enrollment = safeNum(r.enrollment ?? r.Enrollment ?? r["Total Enrollment"] ?? r["Enrollment Count"]);
-        const board = toStr(r.board_district ?? r["Board District"] ?? r["Board District Number"] ?? r["School Board District"]);
-        const calendar = toStr(r.calendar_type ?? r["Calendar"] ?? r["Calendar Type"]);
-        const bilingual = toStr(r.bilingual_program ?? r["Bilingual"] ?? r["Bilingual Program"] ?? r["Bilingual Education Program Status"]);
-        const languages = toStr(r.languages ?? r["Languages"] ?? r["Languages Spoken"] ?? r["Student Languages"]);
+        const board = toStr(
+          r.school_board_district ?? r.board_district ?? r["School Board District"] ?? r["School Board District Number"] ?? r["Board District"]
+        );
+        const calendar = toStr(r.calendar ?? r.calendar_type ?? r["Calendar"] ?? r["Calendar Type"]);
+        const bilingual = toStr(
+          r.bilingual_education_program ?? r.bilingual_program ?? r["Bilingual Education Program"] ?? r["Bilingual Education Program Status"] ?? r["Bilingual Program"]
+        );
+        const languages = toStr(
+          r.home_language_other_than_english ?? r.languages_spoken ?? r.languages ?? r["Languages Spoken"] ?? r["Student Languages"]
+        );
         const lat = safeNum(r.latitude ?? r.Latitude ?? r.lat);
         const lon = safeNum(r.longitude ?? r.Longitude ?? r.lon ?? r.lng);
 
         return {
-          id: r.id ?? i,
+          id: r.objectid ?? r.id ?? i,
           school_name: school || `School ${i+1}`,
+          level,
           enrollment: enrollment ?? 0,
           board_district: board,
           calendar_type: calendar,
           bilingual_program: bilingual,
           languages_spoken: languages,
           latitude: lat,
-          longitude: lon,
-          _raw: r
+          longitude: lon
         };
       });
 
       const [q, setQ] = React.useState("");
+      const [level, setLevel] = React.useState("");
       const [board, setBoard] = React.useState("");
       const [calendar, setCalendar] = React.useState("");
       const [bilingual, setBilingual] = React.useState("");
       const [language, setLanguage] = React.useState("");
       const [selected, setSelected] = React.useState(null);
 
+      const levelOpts = uniq(rows.map(r => r.level));
       const boardOpts = uniq(rows.map(r => r.board_district));
       const calOpts = uniq(rows.map(r => r.calendar_type));
       const bilOpts = uniq(rows.map(r => r.bilingual_program));
@@ -144,11 +152,12 @@
 
       const filtered = rows.filter(r => {
         const matchQ = !q || r.school_name.toLowerCase().includes(q.toLowerCase());
+        const matchLevel = !level || r.level === level;
         const matchBoard = !board || r.board_district === board;
         const matchCal = !calendar || r.calendar_type === calendar;
         const matchBil = !bilingual || r.bilingual_program === bilingual;
         const matchLang = !language || (r.languages_spoken || "").toLowerCase().includes(language.toLowerCase());
-        return matchQ && matchBoard && matchCal && matchBil && matchLang;
+        return matchQ && matchLevel && matchBoard && matchCal && matchBil && matchLang;
       });
 
       const totalSchools = filtered.length;
@@ -163,11 +172,7 @@
       React.useEffect(() => {
         const mapEl = document.getElementById("map");
         if (!mapEl) return;
-
-        if (!window.L) {
-          console.warn("Leaflet not available (L is undefined).");
-          return;
-        }
+        if (!window.L) return;
 
         if (!window.__SKB_MAP__) {
           window.__SKB_MAP__ = window.L.map("map", { zoomControl: true }).setView([35.0844, -106.6504], 10);
@@ -187,10 +192,12 @@
           const m = window.L.circleMarker([r.latitude, r.longitude], { radius: 6, weight: 1, fillOpacity: 0.7 });
           m.bindPopup(
             `<b>${r.school_name}</b><br/>` +
-            `Enrollment: ${r.enrollment}<br/>` +
+            `Level: ${r.level || ""}<br/>` +
+            `Enrollment: ${(r.enrollment||0).toLocaleString()}<br/>` +
             `Board: ${r.board_district || ""}<br/>` +
             `Calendar: ${r.calendar_type || ""}<br/>` +
-            `Bilingual: ${r.bilingual_program || ""}`
+            `Bilingual: ${r.bilingual_program || ""}<br/>` +
+            `Languages: ${r.languages_spoken || ""}`
           );
           m.on("click", () => setSelected(r));
           m.addTo(layer);
@@ -200,16 +207,23 @@
           const bounds = window.L.latLngBounds(pts.map(p => [p.latitude, p.longitude]));
           map.fitBounds(bounds.pad(0.2));
         }
-      }, [q, board, calendar, bilingual, language]);
+      }, [q, level, board, calendar, bilingual, language]);
 
       return el(React.Fragment, null,
         // Left sidebar
         el("div", { className: "card" },
           el("div", { style: { fontWeight: 700 } }, "Filters"),
+
           el("label", null, "Search school"),
           el("input", { value: q, onChange: e=>setQ(e.target.value), placeholder: "Type a school name…" }),
 
-          el("label", null, "Board district"),
+          el("label", null, "School level"),
+          el("select", { value: level, onChange: e=>setLevel(e.target.value) },
+            el("option", { value: "" }, "All"),
+            levelOpts.map(v => el("option", { key:v, value:v }, v))
+          ),
+
+          el("label", null, "School board district"),
           el("select", { value: board, onChange: e=>setBoard(e.target.value) },
             el("option", { value: "" }, "All"),
             boardOpts.map(v => el("option", { key:v, value:v }, v))
@@ -221,7 +235,7 @@
             calOpts.map(v => el("option", { key:v, value:v }, v))
           ),
 
-          el("label", null, "Bilingual program"),
+          el("label", null, "Bilingual education program"),
           el("select", { value: bilingual, onChange: e=>setBilingual(e.target.value) },
             el("option", { value: "" }, "All"),
             bilOpts.map(v => el("option", { key:v, value:v }, v))
@@ -230,15 +244,16 @@
           el("label", null, "Language contains"),
           el("select", { value: language, onChange: e=>setLanguage(e.target.value) },
             el("option", { value: "" }, "All"),
-            allLanguages.slice(0, 200).map(v => el("option", { key:v, value:v }, v))
+            allLanguages.slice(0, 300).map(v => el("option", { key:v, value:v }, v))
           ),
 
           el("button", { onClick: ()=>downloadCSV(filtered.map(r => ({
             school_name: r.school_name,
+            level: r.level,
             enrollment: r.enrollment,
             bilingual_program: r.bilingual_program,
             calendar_type: r.calendar_type,
-            board_district: r.board_district,
+            school_board_district: r.board_district,
             languages_spoken: r.languages_spoken,
             latitude: r.latitude,
             longitude: r.longitude
@@ -276,6 +291,7 @@
               el("thead", null,
                 el("tr", null,
                   el("th", null, "School"),
+                  el("th", null, "Level"),
                   el("th", null, "Enroll"),
                   el("th", null, "Bilingual"),
                   el("th", null, "Calendar"),
@@ -290,6 +306,7 @@
                   onClick: ()=>setSelected(r)
                 },
                   el("td", null, r.school_name),
+                  el("td", null, r.level),
                   el("td", null, (r.enrollment||0).toLocaleString()),
                   el("td", null, r.bilingual_program),
                   el("td", null, r.calendar_type),
