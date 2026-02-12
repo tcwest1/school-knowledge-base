@@ -66,14 +66,25 @@
       return Array.from(new Set(arr.filter(Boolean))).sort((a,b)=>a.localeCompare(b));
     }
 
+    // New Mexico bounding box safety + longitude sign fix
     function normalizeNmCoords(lat, lon) {
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) return { lat: null, lon: null, ok: false };
-      if (lon > 0 && lon >= 100 && lon <= 115) lon = -lon;
+
+      // If longitude is accidentally positive (e.g., 106 instead of -106), flip it.
+      if (lon > 0 && lon >= 100 && lon <= 115 && lat >= 25 && lat <= 45) lon = -lon;
+
+      // Keep only points within an NM-ish bounding box (slightly padded)
       const withinNm = (lat >= 31.0 && lat <= 37.5 && lon >= -109.5 && lon <= -102.5);
       return { lat, lon, ok: withinNm };
     }
 
+    function truthyFlag(v) {
+      const s = toStr(v).toLowerCase();
+      return s === "y" || s === "yes" || s === "true" || s === "1" || s === "t";
+    }
+
     function downloadCSV(rows, filename="schools_filtered.csv") {
+      if (!rows.length) return;
       const headers = Object.keys(rows[0] || {});
       const esc = (v) => `"${String(v ?? "").replaceAll('"','""')}"`;
       const csv = [headers.join(",")].concat(rows.map(r => headers.map(h => esc(r[h])).join(","))).join("\n");
@@ -88,27 +99,41 @@
       URL.revokeObjectURL(url);
     }
 
+    function ErrorPanel({ error }) {
+      return el("div", { className: "wrap" },
+        el("div", { className: "card errorBox" },
+          "Dashboard failed to load.\n\n" + error
+        ),
+        el("div", { className: "card" },
+          el("div", { className: "muted" }, "Tip: open DevTools → Console to see the full stack trace.")
+        )
+      );
+    }
+
     function App({ raw }) {
       const rows = raw.map((r, i) => {
         const school = toStr(r.school_name);
         const level = toStr(r.level);
-        const enrollment = safeNum(r.enrollment);
-        const board = toStr(r.school_board_district);
-        const calendar = toStr(r.calendar);
+        const enrollment = safeNum(r.enrollment) ?? 0;
+
+        const abc = toStr(r.abc_community_school);
         const bilingual = toStr(r.bilingual_education_program);
+        const calendar = toStr(r.calendar);
+        const board = toStr(r.school_board_district);
 
         const lat0 = safeNum(r.latitude);
         const lon0 = safeNum(r.longitude);
         const norm = normalizeNmCoords(lat0, lon0);
 
         return {
-          id: r.objectid ?? i,
-          school_name: school,
+          id: r.objectid ?? r.id ?? i,
+          school_name: school || `School ${i+1}`,
           level,
-          enrollment: enrollment ?? 0,
-          board_district: board,
-          calendar_type: calendar,
-          bilingual_program: bilingual,
+          enrollment,
+          abc_community_school: abc,
+          bilingual_education_program: bilingual,
+          calendar,
+          school_board_district: board,
           latitude: norm.lat,
           longitude: norm.lon,
           in_nm: norm.ok
@@ -120,47 +145,78 @@
       const [board, setBoard] = React.useState("");
       const [calendar, setCalendar] = React.useState("");
       const [bilingual, setBilingual] = React.useState("");
+      const [abc, setAbc] = React.useState("");
+      const [selected, setSelected] = React.useState(null);
 
       const levelOpts = uniq(rows.map(r => r.level));
-      const boardOpts = uniq(rows.map(r => r.board_district));
-      const calOpts = uniq(rows.map(r => r.calendar_type));
-      const bilOpts = uniq(rows.map(r => r.bilingual_program));
+      const boardOpts = uniq(rows.map(r => r.school_board_district));
+      const calOpts = uniq(rows.map(r => r.calendar));
+      const bilingualOpts = uniq(rows.map(r => r.bilingual_education_program));
+      const abcOpts = uniq(rows.map(r => r.abc_community_school));
 
       const filtered = rows.filter(r => {
-        return (!q || r.school_name.toLowerCase().includes(q.toLowerCase())) &&
-               (!level || r.level === level) &&
-               (!board || r.board_district === board) &&
-               (!calendar || r.calendar_type === calendar) &&
-               (!bilingual || r.bilingual_program === bilingual);
+        const matchQ = !q || r.school_name.toLowerCase().includes(q.toLowerCase());
+        const matchLevel = !level || r.level === level;
+        const matchBoard = !board || r.school_board_district === board;
+        const matchCal = !calendar || r.calendar === calendar;
+        const matchBil = !bilingual || r.bilingual_education_program === bilingual;
+        const matchAbc = !abc || r.abc_community_school === abc;
+        return matchQ && matchLevel && matchBoard && matchCal && matchBil && matchAbc;
       });
 
       const totalSchools = filtered.length;
       const totalEnroll = filtered.reduce((a,r)=>a+(r.enrollment||0),0);
+      const abcCount = filtered.filter(r => truthyFlag(r.abc_community_school)).length;
+      const bilingualCount = filtered.filter(r => {
+        const v = toStr(r.bilingual_education_program).toLowerCase();
+        return v.includes("yes") || v.includes("dual") || v.includes("bilingual");
+      }).length;
 
+      // Map: hard constrain to NM + only plot points inside NM
       React.useEffect(() => {
+        const mapEl = document.getElementById("map");
+        if (!mapEl) return;
         if (!window.L) return;
+
         const nmBounds = window.L.latLngBounds([31.2, -109.1], [37.2, -103.0]);
 
         if (!window.__SKB_MAP__) {
           window.__SKB_MAP__ = window.L.map("map", {
+            zoomControl: true,
             maxBounds: nmBounds,
             maxBoundsViscosity: 1.0,
             minZoom: 5
           }).setView([34.5, -106.0], 6);
 
-          window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(window.__SKB_MAP__);
+          window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 18,
+            attribution: "&copy; OpenStreetMap contributors"
+          }).addTo(window.__SKB_MAP__);
+
           window.__SKB_MARKERS__ = window.L.layerGroup().addTo(window.__SKB_MAP__);
         }
 
         const map = window.__SKB_MAP__;
+        map.setMaxBounds(nmBounds);
+
         const layer = window.__SKB_MARKERS__;
         layer.clearLayers();
 
         const pts = filtered.filter(r => r.in_nm && Number.isFinite(r.latitude) && Number.isFinite(r.longitude));
         pts.forEach(r => {
-          window.L.circleMarker([r.latitude, r.longitude], { radius: 6 })
-            .bindPopup(`<b>${r.school_name}</b><br/>Enrollment: ${r.enrollment}`)
-            .addTo(layer);
+          const popup =
+            `<b>${r.school_name}</b><br/>` +
+            `Level: ${r.level || ""}<br/>` +
+            `Enrollment: ${(r.enrollment||0).toLocaleString()}<br/>` +
+            `ABC Community School: ${r.abc_community_school || ""}<br/>` +
+            `Bilingual Program: ${r.bilingual_education_program || ""}<br/>` +
+            `Calendar: ${r.calendar || ""}<br/>` +
+            `School Board District: ${r.school_board_district || ""}`;
+
+          const m = window.L.circleMarker([r.latitude, r.longitude], { radius: 6, weight: 1, fillOpacity: 0.7 });
+          m.bindPopup(popup);
+          m.on("click", () => setSelected(r));
+          m.addTo(layer);
         });
 
         if (pts.length) {
@@ -169,13 +225,17 @@
         } else {
           map.fitBounds(nmBounds, { maxZoom: 7 });
         }
-      }, [q, level, board, calendar, bilingual]);
+
+        map.on("drag", () => map.panInsideBounds(nmBounds, { animate: false }));
+      }, [q, level, board, calendar, bilingual, abc]);
 
       return el(React.Fragment, null,
+        // Left sidebar
         el("div", { className: "card" },
           el("div", { style: { fontWeight: 700 } }, "Filters"),
+
           el("label", null, "Search school"),
-          el("input", { value: q, onChange: e=>setQ(e.target.value) }),
+          el("input", { value: q, onChange: e=>setQ(e.target.value), placeholder: "Type a school name…" }),
 
           el("label", null, "School level"),
           el("select", { value: level, onChange: e=>setLevel(e.target.value) },
@@ -189,32 +249,92 @@
             boardOpts.map(v => el("option", { key:v, value:v }, v))
           ),
 
-          el("label", null, "Calendar type"),
+          el("label", null, "Calendar"),
           el("select", { value: calendar, onChange: e=>setCalendar(e.target.value) },
             el("option", { value: "" }, "All"),
             calOpts.map(v => el("option", { key:v, value:v }, v))
           ),
 
-          el("label", null, "Bilingual education program"),
+          el("label", null, "Bilingual program"),
           el("select", { value: bilingual, onChange: e=>setBilingual(e.target.value) },
             el("option", { value: "" }, "All"),
-            bilOpts.map(v => el("option", { key:v, value:v }, v))
+            bilingualOpts.map(v => el("option", { key:v, value:v }, v))
           ),
 
-          el("button", { onClick: ()=>downloadCSV(filtered) }, "Export filtered CSV")
+          el("label", null, "ABC Community School"),
+          el("select", { value: abc, onChange: e=>setAbc(e.target.value) },
+            el("option", { value: "" }, "All"),
+            abcOpts.map(v => el("option", { key:v, value:v }, v))
+          ),
+
+          el("button", { onClick: ()=>downloadCSV(filtered.map(r => ({
+            school_name: r.school_name,
+            level: r.level,
+            enrollment: r.enrollment,
+            abc_community_school: r.abc_community_school,
+            bilingual_education_program: r.bilingual_education_program,
+            calendar: r.calendar,
+            school_board_district: r.school_board_district,
+            latitude: r.latitude,
+            longitude: r.longitude
+          }))) }, "Export filtered CSV"),
+
+          el("button", { className:"secondary", onClick: ()=>window.print() }, "Print / Save as PDF"),
+
+          el("div", { className:"muted", style:{marginTop:10} }, "Map is locked to New Mexico.")
         ),
 
+        // Main content
         el("div", null,
           el("div", { className:"card" },
             el("div", { className:"kpis" },
               el("div", { className:"kpi" }, el("div",{className:"label"},"Schools"), el("div",{className:"value"}, totalSchools)),
-              el("div", { className:"kpi" }, el("div",{className:"label"},"Total enrollment"), el("div",{className:"value"}, totalEnroll.toLocaleString()))
+              el("div", { className:"kpi" }, el("div",{className:"label"},"Total enrollment"), el("div",{className:"value"}, totalEnroll.toLocaleString())),
+              el("div", { className:"kpi" }, el("div",{className:"label"},"ABC Community Schools"), el("div",{className:"value"}, abcCount)),
+              el("div", { className:"kpi" }, el("div",{className:"label"},"Bilingual program schools"), el("div",{className:"value"}, bilingualCount))
             )
           ),
 
           el("div", { className:"card", style:{marginTop:14} },
-            el("div", { style:{fontWeight:700, marginBottom:8} }, "Map"),
+            el("div", { style:{fontWeight:700, marginBottom:8} }, "Map (OpenStreetMap)"),
             el("div", { id:"map" })
+          ),
+
+          // RESTORED: school table below map
+          el("div", { className:"card", style:{marginTop:14} },
+            el("div", { style:{display:"flex", justifyContent:"space-between", alignItems:"baseline"} },
+              el("div", { style:{fontWeight:700} }, "Schools"),
+              el("div", { className:"muted" }, `Showing ${filtered.length.toLocaleString()} of ${rows.length.toLocaleString()}`)
+            ),
+            el("table", { className:"table" },
+              el("thead", null,
+                el("tr", null,
+                  el("th", null, "School"),
+                  el("th", null, "Level"),
+                  el("th", null, "Enroll"),
+                  el("th", null, "ABC"),
+                  el("th", null, "Bilingual"),
+                  el("th", null, "Calendar"),
+                  el("th", null, "Board Dist.")
+                )
+              ),
+              el("tbody", null,
+                filtered.slice(0, 250).map(r => el("tr", {
+                  key: r.id,
+                  style: selected && selected.id === r.id ? { background:"#f1f5ff" } : null,
+                  onClick: ()=>setSelected(r)
+                },
+                  el("td", null, r.school_name),
+                  el("td", null, r.level),
+                  el("td", null, (r.enrollment||0).toLocaleString()),
+                  el("td", null, r.abc_community_school),
+                  el("td", null, r.bilingual_education_program),
+                  el("td", null, r.calendar),
+                  el("td", null, r.school_board_district)
+                ))
+              )
+            ),
+            filtered.length > 250 ? el("div", { className:"muted", style:{marginTop:8} }, "Showing first 250 rows for performance.") : null
           )
         )
       );
@@ -223,9 +343,17 @@
     async function main() {
       const root = document.getElementById("root");
       const appRoot = ReactDOM.createRoot(root);
-      const res = await fetch("./data.json");
-      const raw = await res.json();
-      appRoot.render(el(App, { raw }));
+
+      try {
+        const res = await fetch("./data.json", { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status} while loading data.json`);
+        const raw = await res.json();
+        if (!Array.isArray(raw)) throw new Error("Expected data.json to be an array of rows.");
+        appRoot.render(el(App, { raw }));
+      } catch (e) {
+        console.error(e);
+        appRoot.render(el(ErrorPanel, { error: String(e && e.stack ? e.stack : e) }));
+      }
     }
 
     main();
