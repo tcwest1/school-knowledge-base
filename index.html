@@ -14,36 +14,310 @@
           crossorigin="anonymous"></script>
 
   <style>
-    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-    body { margin: 0; background:#f6f7fb; color:#0f172a; }
-    header { padding: 16px 20px; background:#fff; border-bottom:1px solid #e5e7eb; position: sticky; top:0; z-index: 10; }
-    h1 { margin:0; font-size: 20px; }
-    .wrap { display:grid; grid-template-columns: 340px 1fr; gap: 14px; padding: 14px; }
-    .card { background:#fff; border:1px solid #e5e7eb; border-radius: 12px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
-    .kpis { display:grid; grid-template-columns: repeat(4, minmax(120px,1fr)); gap: 10px; }
-    .kpi { padding: 10px; border:1px solid #eef2f7; border-radius: 10px; background:#fbfcff; }
-    .kpi .label { font-size: 12px; color:#475569; }
-    .kpi .value { font-size: 20px; font-weight: 700; margin-top: 2px; }
-    label { display:block; font-size: 12px; color:#475569; margin-top: 10px; }
-    input, select { width: 100%; padding: 8px 10px; border-radius: 10px; border:1px solid #e5e7eb; background:#fff; }
-    button { width:100%; margin-top: 10px; padding:10px 12px; border-radius: 10px; border:1px solid #e5e7eb; background:#0f172a; color:#fff; cursor:pointer; }
-    button.secondary { background:#fff; color:#0f172a; }
-    #map { height: 520px; border-radius: 12px; overflow:hidden; border:1px solid #e5e7eb; }
-    .table { width:100%; border-collapse: collapse; font-size: 12px; }
-    .table th, .table td { padding: 8px; border-bottom: 1px solid #eef2f7; text-align:left; vertical-align: top; }
-    .muted { color:#64748b; font-size: 12px; }
-    .errorBox { white-space: pre-wrap; background:#fff; border:1px solid #fecaca; color:#991b1b; padding: 12px; border-radius: 12px; }
-    @media (max-width: 1100px){
-      .wrap { grid-template-columns: 1fr; }
-      .kpis { grid-template-columns: repeat(2, minmax(120px,1fr)); }
+    /* ===== APS-ish Enterprise Theme ===== */
+    :root{
+      --aps-navy:#003B5C;
+      --aps-red:#C8102E;
+      --aps-gold:#FFC72C;
+      --bg:#f5f7fb;
+      --card:#ffffff;
+      --line:#e6eaf2;
+      --muted:#5b6b7c;
+      --text:#0b1220;
+      --shadow: 0 6px 20px rgba(15, 23, 42, .06);
+      --shadow2: 0 1px 2px rgba(15, 23, 42, .08);
+      --radius:14px;
+      --radius-sm:10px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    *{box-sizing:border-box}
+    html, body { height:100%; }
+    body { margin: 0; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+
+    /* Header */
+    header {
+      position: sticky; top:0; z-index: 30;
+      background: linear-gradient(90deg, var(--aps-navy), #0b5f88);
+      color:#fff;
+      border-bottom: 3px solid var(--aps-gold);
+      box-shadow: var(--shadow2);
+    }
+    .header-inner{
+      display:flex; align-items:center; justify-content:space-between;
+      padding: 14px 18px;
+      gap: 12px;
+    }
+    .brand{
+      display:flex; align-items:center; gap: 12px;
+      min-width: 0;
+    }
+    .brand h1{
+      margin:0; font-size: 18px; font-weight: 800; letter-spacing: .2px;
+      white-space: nowrap; overflow:hidden; text-overflow: ellipsis;
+    }
+    .sub{
+      margin:0;
+      font-size: 12px;
+      color: rgba(255,255,255,.85);
+    }
+    .pill{
+      display:inline-flex; align-items:center; gap: 8px;
+      padding: 6px 10px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.08);
+      border-radius: 999px;
+      font-size: 12px;
+      color: rgba(255,255,255,.92);
+      white-space: nowrap;
+    }
+    .logo{
+      width: 34px; height:34px; flex: 0 0 auto;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 2px 10px rgba(0,0,0,.15);
+      display:grid; place-items:center;
+      overflow:hidden;
+    }
+    .logo svg{ width: 34px; height: 34px; display:block; }
+
+    /* Layout */
+    .wrap{
+      display:grid;
+      grid-template-columns: 340px 1fr 360px; /* filters | main | details */
+      gap: 14px;
+      padding: 14px;
+      align-items:start;
+    }
+
+    /* Cards */
+    .card{
+      background:var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow2);
+      overflow:hidden;
+    }
+    .card .hd{
+      padding: 12px 12px 10px;
+      border-bottom: 1px solid var(--line);
+      display:flex; align-items:center; justify-content:space-between; gap: 10px;
+    }
+    .card .hd .title{
+      font-weight: 800;
+      font-size: 13px;
+      letter-spacing: .2px;
+      color: #0f172a;
+      display:flex; align-items:center; gap: 8px;
+    }
+    .card .bd{ padding: 12px; }
+    .muted{ color: var(--muted); font-size: 12px; }
+    code{ font-family: var(--mono); font-size: 12px; background:#eef2ff; padding: 2px 6px; border-radius: 8px; }
+
+    /* Controls */
+    label { display:block; font-size: 12px; color: var(--muted); margin-top: 10px; margin-bottom: 6px; }
+    input, select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      background:#fff;
+      outline:none;
+      font-size: 13px;
+    }
+    input:focus, select:focus{
+      border-color: rgba(11,95,136,.45);
+      box-shadow: 0 0 0 4px rgba(11,95,136,.12);
+    }
+    .row{ display:flex; gap: 10px; }
+    .row > * { flex: 1; }
+
+    .btn{
+      width:100%;
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0);
+      background: var(--aps-navy);
+      color:#fff;
+      cursor:pointer;
+      font-weight: 700;
+      font-size: 13px;
+      box-shadow: 0 6px 16px rgba(0,59,92,.18);
+    }
+    .btn:hover{ filter: brightness(1.03); }
+    .btn.secondary{
+      background:#fff;
+      color: var(--aps-navy);
+      border-color: var(--line);
+      box-shadow: none;
+    }
+    .btn.ghost{
+      background: transparent;
+      color: var(--aps-navy);
+      border-color: transparent;
+      box-shadow:none;
+      padding: 8px 10px;
+      width:auto;
+    }
+    .btn.small{
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 12px;
+      width:auto;
+    }
+
+    /* KPI */
+    .kpis{
+      display:grid;
+      grid-template-columns: repeat(4, minmax(120px,1fr));
+      gap: 10px;
+    }
+    .kpi{
+      padding: 10px;
+      border: 1px solid #eef2f7;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #fbfdff, #ffffff);
+    }
+    .kpi .label{ margin:0; font-size:12px; color: var(--muted); }
+    .kpi .value{ margin-top: 2px; font-size: 20px; font-weight: 900; letter-spacing: .2px; }
+
+    /* Map */
+    #map { height: 520px; border-radius: 12px; overflow:hidden; border:1px solid var(--line); }
+    .mapWrap{ padding: 12px; }
+
+    /* Table */
+    .tableWrap{ padding: 0; }
+    .tableTools{
+      display:flex;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      align-items:center;
+      flex-wrap: wrap;
+    }
+    .tableTools .leftTools{ display:flex; gap:10px; align-items:center; flex: 1; min-width: 260px; }
+    .tableTools .rightTools{ display:flex; gap:8px; align-items:center; }
+    .tableTools input{ max-width: 360px; }
+    .table{
+      width:100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .table th, .table td{
+      padding: 10px 10px;
+      border-bottom: 1px solid #eef2f7;
+      text-align:left;
+      vertical-align: top;
+      white-space: nowrap;
+    }
+    .table td.wrap{
+      white-space: normal;
+    }
+    .table thead th{
+      position: sticky;
+      top: 0;
+      background:#fbfcff;
+      z-index: 5;
+      border-bottom: 1px solid var(--line);
+      font-weight: 800;
+      color: #0f172a;
+      cursor: pointer;
+      user-select: none;
+    }
+    .table thead th .sort{
+      font-size: 11px;
+      color: var(--muted);
+      margin-left: 6px;
+    }
+    .table tbody tr:hover{
+      background: #f6f9ff;
+    }
+    .table tbody tr.selected{
+      background: #eef5ff;
+    }
+    .chip{
+      display:inline-flex; align-items:center;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid #e9eef7;
+      background:#f8fafc;
+      color:#0f172a;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .chip.good{ border-color: rgba(34,197,94,.25); background: rgba(34,197,94,.08); }
+    .chip.warn{ border-color: rgba(245,158,11,.25); background: rgba(245,158,11,.10); }
+    .chip.bad{ border-color: rgba(239,68,68,.25); background: rgba(239,68,68,.08); }
+
+    /* Side Panel */
+    .panel{
+      position: sticky;
+      top: 88px; /* below header */
+      max-height: calc(100vh - 100px);
+      overflow: auto;
+    }
+    .panel .bd{ padding: 12px; }
+    .kv{
+      display:grid;
+      grid-template-columns: 130px 1fr;
+      gap: 8px 10px;
+      font-size: 12px;
+    }
+    .kv .k{ color: var(--muted); }
+    .kv .v{ font-weight: 700; color:#0f172a; }
+    .divider{ height:1px; background: var(--line); margin: 12px 0; }
+    .empty{
+      padding: 10px;
+      border: 1px dashed #d7ddea;
+      border-radius: 12px;
+      background: #fbfcff;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    /* Responsive */
+    @media (max-width: 1180px){
+      .wrap{ grid-template-columns: 340px 1fr; }
+      .panel{ position: relative; top:auto; max-height:none; }
+    }
+    @media (max-width: 900px){
+      .wrap{ grid-template-columns: 1fr; }
+      .kpis{ grid-template-columns: repeat(2, minmax(120px,1fr)); }
+      .tableTools input{ max-width: none; }
     }
   </style>
 </head>
 
 <body>
   <header>
-    <h1>APS School Explorer</h1>
-    <div class="muted">Public dashboard • Data source: <code>data.json</code></div>
+    <div class="header-inner">
+      <div class="brand">
+        <!-- Inline “APS” mark (placeholder badge). If you have an official APS logo PNG/SVG, replace this block with <img src="aps-logo.png" .../> -->
+        <div class="logo" aria-label="APS logo">
+          <svg viewBox="0 0 64 64" role="img" aria-label="APS">
+            <defs>
+              <linearGradient id="g" x1="0" x2="1">
+                <stop offset="0" stop-color="#003B5C"/>
+                <stop offset="1" stop-color="#0b5f88"/>
+              </linearGradient>
+            </defs>
+            <rect x="0" y="0" width="64" height="64" rx="14" fill="white"/>
+            <rect x="6" y="6" width="52" height="52" rx="12" fill="url(#g)"/>
+            <path d="M18 44V20h10c6 0 10 3 10 9s-4 9-10 9h-4v6h-6zm6-12h4c2.7 0 4-1.2 4-3s-1.3-3-4-3h-4v6zm22 12c-6 0-10-3-10-7h6c0 1.7 1.7 2.7 4 2.7 2 0 3.5-.8 3.5-2 0-1.5-2-2-4.8-2.6-4.2-1-8.5-2.3-8.5-7 0-4.2 3.8-7 9.3-7 5.6 0 9.2 2.8 9.4 7h-6c-.1-1.5-1.6-2.4-3.6-2.4-1.9 0-3.1.7-3.1 1.9 0 1.3 1.9 1.8 4.6 2.4 4.3 1 8.8 2.3 8.8 7.1 0 4.4-4 7.9-10.6 7.9z" fill="#fff"/>
+            <rect x="6" y="52" width="52" height="6" rx="3" fill="#FFC72C"/>
+          </svg>
+        </div>
+        <div style="min-width:0">
+          <h1>APS School Explorer</h1>
+          <p class="sub">Public dashboard • Data source: <code>data.json</code></p>
+        </div>
+      </div>
+      <div class="pill" title="GitHub Pages friendly static site">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--aps-gold)"></span>
+        Static • Embeddable • Exportable
+      </div>
+    </div>
   </header>
 
   <div id="root" class="wrap"></div>
@@ -66,14 +340,9 @@
       return Array.from(new Set(arr.filter(Boolean))).sort((a,b)=>a.localeCompare(b));
     }
 
-    // New Mexico bounding box safety + longitude sign fix
     function normalizeNmCoords(lat, lon) {
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) return { lat: null, lon: null, ok: false };
-
-      // If longitude is accidentally positive (e.g., 106 instead of -106), flip it.
       if (lon > 0 && lon >= 100 && lon <= 115 && lat >= 25 && lat <= 45) lon = -lon;
-
-      // Keep only points within an NM-ish bounding box (slightly padded)
       const withinNm = (lat >= 31.0 && lat <= 37.5 && lon >= -109.5 && lon <= -102.5);
       return { lat, lon, ok: withinNm };
     }
@@ -101,13 +370,19 @@
 
     function ErrorPanel({ error }) {
       return el("div", { className: "wrap" },
-        el("div", { className: "card errorBox" },
-          "Dashboard failed to load.\n\n" + error
-        ),
-        el("div", { className: "card" },
-          el("div", { className: "muted" }, "Tip: open DevTools → Console to see the full stack trace.")
+        el("div", { className: "card", style:{gridColumn:"1 / -1"} },
+          el("div", { className:"hd" }, el("div",{className:"title"},"Dashboard failed to load")),
+          el("div", { className:"bd", style:{whiteSpace:"pre-wrap", color:"#991b1b"} }, String(error))
         )
       );
+    }
+
+    function sortValue(row, key) {
+      const v = row[key];
+      if (v === null || v === undefined) return "";
+      // Numeric sort for enrollment
+      if (key === "enrollment") return Number(v) || 0;
+      return String(v).toLowerCase();
     }
 
     function App({ raw }) {
@@ -136,25 +411,35 @@
           school_board_district: board,
           latitude: norm.lat,
           longitude: norm.lon,
-          in_nm: norm.ok
+          in_nm: norm.ok,
+          // Keep any original fields available in side panel export if needed
+          _raw: r
         };
       });
 
+      // Global filters (sidebar)
       const [q, setQ] = React.useState("");
       const [level, setLevel] = React.useState("");
       const [board, setBoard] = React.useState("");
       const [calendar, setCalendar] = React.useState("");
       const [bilingual, setBilingual] = React.useState("");
       const [abc, setAbc] = React.useState("");
+
+      // Table tools
+      const [tableSearch, setTableSearch] = React.useState("");
+      const [sortKey, setSortKey] = React.useState("school_name");
+      const [sortDir, setSortDir] = React.useState("asc"); // asc | desc
       const [selected, setSelected] = React.useState(null);
 
+      // Filter options
       const levelOpts = uniq(rows.map(r => r.level));
       const boardOpts = uniq(rows.map(r => r.school_board_district));
       const calOpts = uniq(rows.map(r => r.calendar));
       const bilingualOpts = uniq(rows.map(r => r.bilingual_education_program));
       const abcOpts = uniq(rows.map(r => r.abc_community_school));
 
-      const filtered = rows.filter(r => {
+      // Apply global filters
+      const globallyFiltered = rows.filter(r => {
         const matchQ = !q || r.school_name.toLowerCase().includes(q.toLowerCase());
         const matchLevel = !level || r.level === level;
         const matchBoard = !board || r.school_board_district === board;
@@ -164,15 +449,40 @@
         return matchQ && matchLevel && matchBoard && matchCal && matchBil && matchAbc;
       });
 
-      const totalSchools = filtered.length;
-      const totalEnroll = filtered.reduce((a,r)=>a+(r.enrollment||0),0);
-      const abcCount = filtered.filter(r => truthyFlag(r.abc_community_school)).length;
-      const bilingualCount = filtered.filter(r => {
+      // Apply table-specific search to the already-filtered set
+      const tableFiltered = globallyFiltered.filter(r => {
+        if (!tableSearch) return true;
+        const s = tableSearch.toLowerCase();
+        return (
+          r.school_name.toLowerCase().includes(s) ||
+          toStr(r.level).toLowerCase().includes(s) ||
+          toStr(r.calendar).toLowerCase().includes(s) ||
+          toStr(r.school_board_district).toLowerCase().includes(s) ||
+          toStr(r.bilingual_education_program).toLowerCase().includes(s) ||
+          toStr(r.abc_community_school).toLowerCase().includes(s)
+        );
+      });
+
+      // Sorted
+      const filtered = [...tableFiltered].sort((a,b)=>{
+        const av = sortValue(a, sortKey);
+        const bv = sortValue(b, sortKey);
+        let cmp = 0;
+        if (typeof av === "number" && typeof bv === "number") cmp = av - bv;
+        else cmp = String(av).localeCompare(String(bv));
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+
+      // KPIs
+      const totalSchools = globallyFiltered.length;
+      const totalEnroll = globallyFiltered.reduce((a,r)=>a+(r.enrollment||0),0);
+      const abcCount = globallyFiltered.filter(r => truthyFlag(r.abc_community_school)).length;
+      const bilingualCount = globallyFiltered.filter(r => {
         const v = toStr(r.bilingual_education_program).toLowerCase();
         return v.includes("yes") || v.includes("dual") || v.includes("bilingual");
       }).length;
 
-      // Map: hard constrain to NM + only plot points inside NM
+      // Map: NM constrained, plot global filter (not table search) so the map matches the "main" filtered set
       React.useEffect(() => {
         const mapEl = document.getElementById("map");
         if (!mapEl) return;
@@ -202,7 +512,8 @@
         const layer = window.__SKB_MARKERS__;
         layer.clearLayers();
 
-        const pts = filtered.filter(r => r.in_nm && Number.isFinite(r.latitude) && Number.isFinite(r.longitude));
+        const pts = globallyFiltered.filter(r => r.in_nm && Number.isFinite(r.latitude) && Number.isFinite(r.longitude));
+
         pts.forEach(r => {
           const popup =
             `<b>${r.school_name}</b><br/>` +
@@ -213,7 +524,12 @@
             `Calendar: ${r.calendar || ""}<br/>` +
             `School Board District: ${r.school_board_district || ""}`;
 
-          const m = window.L.circleMarker([r.latitude, r.longitude], { radius: 6, weight: 1, fillOpacity: 0.7 });
+          const m = window.L.circleMarker([r.latitude, r.longitude], {
+            radius: 6,
+            weight: 1,
+            fillOpacity: 0.75,
+            color: "#0b5f88"
+          });
           m.bindPopup(popup);
           m.on("click", () => setSelected(r));
           m.addTo(layer);
@@ -229,113 +545,258 @@
         map.on("drag", () => map.panInsideBounds(nmBounds, { animate: false }));
       }, [q, level, board, calendar, bilingual, abc]);
 
+      function toggleSort(key){
+        if (sortKey === key){
+          setSortDir(sortDir === "asc" ? "desc" : "asc");
+        } else {
+          setSortKey(key);
+          setSortDir(key === "enrollment" ? "desc" : "asc");
+        }
+      }
+
+      function SortMark({ col }){
+        if (sortKey !== col) return el("span", { className:"sort" }, "↕");
+        return el("span", { className:"sort" }, sortDir === "asc" ? "↑" : "↓");
+      }
+
+      function Badge({ kind, children }){
+        const cls = kind ? `chip ${kind}` : "chip";
+        return el("span", { className: cls }, children);
+      }
+
+      const selectedId = selected ? selected.id : null;
+
+      // Side panel content
+      const panelBody = selected ? el(React.Fragment, null,
+        el("div", { className:"bd" },
+          el("div", { style:{display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:"10px"} },
+            el("div", null,
+              el("div", { style:{fontWeight:900, fontSize:"14px"} }, selected.school_name),
+              el("div", { className:"muted", style:{marginTop:"2px"} }, selected.level ? `Level: ${selected.level}` : " ")
+            ),
+            el("button", { className:"btn ghost", onClick: ()=>setSelected(null), title:"Close" }, "✕")
+          ),
+
+          el("div", { className:"divider" }),
+
+          el("div", { style:{display:"flex", gap:"8px", flexWrap:"wrap"} },
+            truthyFlag(selected.abc_community_school) ? el(Badge, { kind:"good" }, "ABC Community") : el(Badge, null, "Not ABC"),
+            (toStr(selected.bilingual_education_program).toLowerCase().includes("yes") ||
+             toStr(selected.bilingual_education_program).toLowerCase().includes("dual") ||
+             toStr(selected.bilingual_education_program).toLowerCase().includes("bilingual"))
+              ? el(Badge, { kind:"good" }, "Bilingual Program")
+              : el(Badge, null, "Not Bilingual"),
+            selected.calendar ? el(Badge, null, selected.calendar) : null,
+            selected.school_board_district ? el(Badge, null, `Board ${selected.school_board_district}`) : null
+          ),
+
+          el("div", { className:"divider" }),
+
+          el("div", { className:"kv" },
+            el("div", { className:"k" }, "Enrollment"),
+            el("div", { className:"v" }, (selected.enrollment ?? 0).toLocaleString()),
+
+            el("div", { className:"k" }, "Calendar"),
+            el("div", { className:"v" }, selected.calendar || "—"),
+
+            el("div", { className:"k" }, "School Board District"),
+            el("div", { className:"v" }, selected.school_board_district || "—"),
+
+            el("div", { className:"k" }, "ABC Community School"),
+            el("div", { className:"v" }, selected.abc_community_school || "—"),
+
+            el("div", { className:"k" }, "Bilingual Program"),
+            el("div", { className:"v" }, selected.bilingual_education_program || "—"),
+
+            el("div", { className:"k" }, "Latitude / Longitude"),
+            el("div", { className:"v" }, (Number.isFinite(selected.latitude) && Number.isFinite(selected.longitude)) ? `${selected.latitude}, ${selected.longitude}` : "—"),
+          ),
+
+          el("div", { className:"divider" }),
+
+          el("div", { style:{display:"flex", gap:"10px", flexWrap:"wrap"} },
+            el("button", {
+              className:"btn small",
+              onClick: ()=>downloadCSV([{
+                school_name: selected.school_name,
+                level: selected.level,
+                enrollment: selected.enrollment,
+                abc_community_school: selected.abc_community_school,
+                bilingual_education_program: selected.bilingual_education_program,
+                calendar: selected.calendar,
+                school_board_district: selected.school_board_district,
+                latitude: selected.latitude,
+                longitude: selected.longitude
+              }], "school_detail.csv")
+            }, "Export school CSV"),
+            el("button", { className:"btn small secondary", onClick: ()=>window.print() }, "Print / PDF")
+          )
+        )
+      ) : el("div", { className:"bd" },
+        el("div", { className:"empty" },
+          el("div", { style:{fontWeight:800, marginBottom:"6px", color:"#0f172a"} }, "Select a school"),
+          "Click a map point or a table row to view details here."
+        )
+      );
+
       return el(React.Fragment, null,
-        // Left sidebar
-        el("div", { className: "card" },
-          el("div", { style: { fontWeight: 700 } }, "Filters"),
-
-          el("label", null, "Search school"),
-          el("input", { value: q, onChange: e=>setQ(e.target.value), placeholder: "Type a school name…" }),
-
-          el("label", null, "School level"),
-          el("select", { value: level, onChange: e=>setLevel(e.target.value) },
-            el("option", { value: "" }, "All"),
-            levelOpts.map(v => el("option", { key:v, value:v }, v))
+        // Left: Filters
+        el("div", { className:"card" },
+          el("div", { className:"hd" },
+            el("div", { className:"title" }, "Filters"),
+            el("div", { className:"muted" }, `${globallyFiltered.length.toLocaleString()} schools`)
           ),
+          el("div", { className:"bd" },
+            el("label", null, "Search school"),
+            el("input", { value: q, onChange: e=>setQ(e.target.value), placeholder: "Type a school name…" }),
 
-          el("label", null, "School board district"),
-          el("select", { value: board, onChange: e=>setBoard(e.target.value) },
-            el("option", { value: "" }, "All"),
-            boardOpts.map(v => el("option", { key:v, value:v }, v))
-          ),
+            el("label", null, "School level"),
+            el("select", { value: level, onChange: e=>setLevel(e.target.value) },
+              el("option", { value: "" }, "All"),
+              levelOpts.map(v => el("option", { key:v, value:v }, v))
+            ),
 
-          el("label", null, "Calendar"),
-          el("select", { value: calendar, onChange: e=>setCalendar(e.target.value) },
-            el("option", { value: "" }, "All"),
-            calOpts.map(v => el("option", { key:v, value:v }, v))
-          ),
+            el("label", null, "School board district"),
+            el("select", { value: board, onChange: e=>setBoard(e.target.value) },
+              el("option", { value: "" }, "All"),
+              boardOpts.map(v => el("option", { key:v, value:v }, v))
+            ),
 
-          el("label", null, "Bilingual program"),
-          el("select", { value: bilingual, onChange: e=>setBilingual(e.target.value) },
-            el("option", { value: "" }, "All"),
-            bilingualOpts.map(v => el("option", { key:v, value:v }, v))
-          ),
+            el("label", null, "Calendar"),
+            el("select", { value: calendar, onChange: e=>setCalendar(e.target.value) },
+              el("option", { value: "" }, "All"),
+              calOpts.map(v => el("option", { key:v, value:v }, v))
+            ),
 
-          el("label", null, "ABC Community School"),
-          el("select", { value: abc, onChange: e=>setAbc(e.target.value) },
-            el("option", { value: "" }, "All"),
-            abcOpts.map(v => el("option", { key:v, value:v }, v))
-          ),
+            el("label", null, "Bilingual program"),
+            el("select", { value: bilingual, onChange: e=>setBilingual(e.target.value) },
+              el("option", { value: "" }, "All"),
+              bilingualOpts.map(v => el("option", { key:v, value:v }, v))
+            ),
 
-          el("button", { onClick: ()=>downloadCSV(filtered.map(r => ({
-            school_name: r.school_name,
-            level: r.level,
-            enrollment: r.enrollment,
-            abc_community_school: r.abc_community_school,
-            bilingual_education_program: r.bilingual_education_program,
-            calendar: r.calendar,
-            school_board_district: r.school_board_district,
-            latitude: r.latitude,
-            longitude: r.longitude
-          }))) }, "Export filtered CSV"),
+            el("label", null, "ABC Community School"),
+            el("select", { value: abc, onChange: e=>setAbc(e.target.value) },
+              el("option", { value: "" }, "All"),
+              abcOpts.map(v => el("option", { key:v, value:v }, v))
+            ),
 
-          el("button", { className:"secondary", onClick: ()=>window.print() }, "Print / Save as PDF"),
+            el("div", { style:{marginTop:"12px"} },
+              el("button", {
+                className:"btn",
+                onClick: ()=>downloadCSV(globallyFiltered.map(r => ({
+                  school_name: r.school_name,
+                  level: r.level,
+                  enrollment: r.enrollment,
+                  abc_community_school: r.abc_community_school,
+                  bilingual_education_program: r.bilingual_education_program,
+                  calendar: r.calendar,
+                  school_board_district: r.school_board_district,
+                  latitude: r.latitude,
+                  longitude: r.longitude
+                })), "schools_filtered.csv")
+              }, "Export filtered CSV"),
+              el("button", { className:"btn secondary", onClick: ()=>window.print() }, "Print / Save as PDF")
+            ),
 
-          el("div", { className:"muted", style:{marginTop:10} }, "Map is locked to New Mexico.")
+            el("div", { className:"muted", style:{marginTop:"10px"} },
+              "Map is locked to New Mexico."
+            )
+          )
         ),
 
-        // Main content
+        // Middle: Main content (KPIs, map, table)
         el("div", null,
           el("div", { className:"card" },
-            el("div", { className:"kpis" },
-              el("div", { className:"kpi" }, el("div",{className:"label"},"Schools"), el("div",{className:"value"}, totalSchools)),
-              el("div", { className:"kpi" }, el("div",{className:"label"},"Total enrollment"), el("div",{className:"value"}, totalEnroll.toLocaleString())),
-              el("div", { className:"kpi" }, el("div",{className:"label"},"ABC Community Schools"), el("div",{className:"value"}, abcCount)),
-              el("div", { className:"kpi" }, el("div",{className:"label"},"Bilingual program schools"), el("div",{className:"value"}, bilingualCount))
+            el("div", { className:"hd" },
+              el("div", { className:"title" }, "Summary")
+            ),
+            el("div", { className:"bd" },
+              el("div", { className:"kpis" },
+                el("div", { className:"kpi" }, el("div",{className:"label"},"Schools"), el("div",{className:"value"}, totalSchools)),
+                el("div", { className:"kpi" }, el("div",{className:"label"},"Total enrollment"), el("div",{className:"value"}, totalEnroll.toLocaleString())),
+                el("div", { className:"kpi" }, el("div",{className:"label"},"ABC Community Schools"), el("div",{className:"value"}, abcCount)),
+                el("div", { className:"kpi" }, el("div",{className:"label"},"Bilingual program schools"), el("div",{className:"value"}, bilingualCount))
+              )
             )
           ),
 
           el("div", { className:"card", style:{marginTop:14} },
-            el("div", { style:{fontWeight:700, marginBottom:8} }, "Map (OpenStreetMap)"),
-            el("div", { id:"map" })
+            el("div", { className:"hd" },
+              el("div", { className:"title" }, "Map (OpenStreetMap)"),
+              el("div", { className:"muted" }, `${globallyFiltered.filter(r=>r.in_nm).length.toLocaleString()} mapped`)
+            ),
+            el("div", { className:"mapWrap" },
+              el("div", { id:"map" })
+            )
           ),
 
-          // RESTORED: school table below map
           el("div", { className:"card", style:{marginTop:14} },
-            el("div", { style:{display:"flex", justifyContent:"space-between", alignItems:"baseline"} },
-              el("div", { style:{fontWeight:700} }, "Schools"),
+            el("div", { className:"hd" },
+              el("div", { className:"title" }, "Schools table"),
               el("div", { className:"muted" }, `Showing ${filtered.length.toLocaleString()} of ${rows.length.toLocaleString()}`)
             ),
-            el("table", { className:"table" },
-              el("thead", null,
-                el("tr", null,
-                  el("th", null, "School"),
-                  el("th", null, "Level"),
-                  el("th", null, "Enroll"),
-                  el("th", null, "ABC"),
-                  el("th", null, "Bilingual"),
-                  el("th", null, "Calendar"),
-                  el("th", null, "Board Dist.")
-                )
+
+            el("div", { className:"tableTools" },
+              el("div", { className:"leftTools" },
+                el("input", {
+                  value: tableSearch,
+                  onChange: e=>setTableSearch(e.target.value),
+                  placeholder: "Filter table (name, level, calendar, board, ABC, bilingual)…"
+                }),
+                el("span", { className:"muted" }, `Sort: ${sortKey.replaceAll("_"," ")} (${sortDir})`)
               ),
-              el("tbody", null,
-                filtered.slice(0, 250).map(r => el("tr", {
-                  key: r.id,
-                  style: selected && selected.id === r.id ? { background:"#f1f5ff" } : null,
-                  onClick: ()=>setSelected(r)
-                },
-                  el("td", null, r.school_name),
-                  el("td", null, r.level),
-                  el("td", null, (r.enrollment||0).toLocaleString()),
-                  el("td", null, r.abc_community_school),
-                  el("td", null, r.bilingual_education_program),
-                  el("td", null, r.calendar),
-                  el("td", null, r.school_board_district)
-                ))
+              el("div", { className:"rightTools" },
+                el("button", {
+                  className:"btn small secondary",
+                  onClick: ()=>{ setTableSearch(""); setSortKey("school_name"); setSortDir("asc"); }
+                }, "Reset table")
               )
             ),
-            filtered.length > 250 ? el("div", { className:"muted", style:{marginTop:8} }, "Showing first 250 rows for performance.") : null
+
+            el("div", { className:"tableWrap", style:{maxHeight:"520px", overflow:"auto"} },
+              el("table", { className:"table" },
+                el("thead", null,
+                  el("tr", null,
+                    el("th", { onClick: ()=>toggleSort("school_name") }, "School", el(SortMark, { col:"school_name" })),
+                    el("th", { onClick: ()=>toggleSort("level") }, "Level", el(SortMark, { col:"level" })),
+                    el("th", { onClick: ()=>toggleSort("enrollment") }, "Enroll", el(SortMark, { col:"enrollment" })),
+                    el("th", { onClick: ()=>toggleSort("abc_community_school") }, "ABC", el(SortMark, { col:"abc_community_school" })),
+                    el("th", { onClick: ()=>toggleSort("bilingual_education_program") }, "Bilingual", el(SortMark, { col:"bilingual_education_program" })),
+                    el("th", { onClick: ()=>toggleSort("calendar") }, "Calendar", el(SortMark, { col:"calendar" })),
+                    el("th", { onClick: ()=>toggleSort("school_board_district") }, "Board", el(SortMark, { col:"school_board_district" }))
+                  )
+                ),
+                el("tbody", null,
+                  filtered.slice(0, 500).map(r => el("tr", {
+                    key: r.id,
+                    className: (selectedId === r.id) ? "selected" : "",
+                    onClick: ()=>setSelected(r),
+                    title: "Click for details"
+                  },
+                    el("td", { className:"wrap" }, r.school_name),
+                    el("td", null, r.level || "—"),
+                    el("td", null, (r.enrollment||0).toLocaleString()),
+                    el("td", null, truthyFlag(r.abc_community_school) ? el("span",{className:"chip good"},"Yes") : el("span",{className:"chip"},"No")),
+                    el("td", null, r.bilingual_education_program ? el("span",{className:"chip"}, r.bilingual_education_program) : "—"),
+                    el("td", null, r.calendar || "—"),
+                    el("td", null, r.school_board_district || "—"),
+                  ))
+                )
+              ),
+              filtered.length > 500 ? el("div", { className:"bd" },
+                el("div", { className:"muted" }, "Showing first 500 rows for performance. Use filters to narrow further.")
+              ) : null
+            )
           )
+        ),
+
+        // Right: Detail panel
+        el("div", { className:"card panel" },
+          el("div", { className:"hd" },
+            el("div", { className:"title" }, "School details"),
+            selected ? el("span", { className:"muted" }, "Selected") : el("span", { className:"muted" }, "None")
+          ),
+          panelBody
         )
       );
     }
@@ -352,7 +813,7 @@
         appRoot.render(el(App, { raw }));
       } catch (e) {
         console.error(e);
-        appRoot.render(el(ErrorPanel, { error: String(e && e.stack ? e.stack : e) }));
+        appRoot.render(el(ErrorPanel, { error: (e && e.stack) ? e.stack : String(e) }));
       }
     }
 
