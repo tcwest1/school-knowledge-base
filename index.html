@@ -26,6 +26,8 @@
     .kpi .value { font-size: 20px; font-weight: 700; margin-top: 2px; }
     label { display:block; font-size: 12px; color:#475569; margin-top: 10px; }
     input, select { width: 100%; padding: 8px 10px; border-radius: 10px; border:1px solid #e5e7eb; background:#fff; }
+    select[multiple] { height: 170px; padding: 6px; }
+    .hint { font-size: 11px; color:#64748b; margin-top: 4px; }
     button { width:100%; margin-top: 10px; padding:10px 12px; border-radius: 10px; border:1px solid #e5e7eb; background:#0f172a; color:#fff; cursor:pointer; }
     button.secondary { background:#fff; color:#0f172a; }
     #map { height: 520px; border-radius: 12px; overflow:hidden; border:1px solid #e5e7eb; }
@@ -65,6 +67,12 @@
     function uniq(arr) {
       return Array.from(new Set(arr.filter(Boolean))).sort((a,b)=>a.localeCompare(b));
     }
+    function parseLanguages(s) {
+      return (toStr(s))
+        .split(/[,;|]/g)
+        .map(x => x.trim())
+        .filter(Boolean);
+    }
 
     function downloadCSV(rows, filename="schools_filtered.csv") {
       const headers = Object.keys(rows[0] || {});
@@ -95,7 +103,7 @@
     }
 
     function App({ raw }) {
-      // IMPORTANT: Column mapping aligned to your data.json keys:
+      // Column mapping aligned to your data.json keys:
       // school_name, level, enrollment, bilingual_education_program, calendar, school_board_district, home_language_other_than_english, latitude, longitude
       const rows = raw.map((r, i) => {
         const school = toStr(r.school_name ?? r.School ?? r["School Name"] ?? r.name ?? r["Name"]);
@@ -114,6 +122,8 @@
         const lat = safeNum(r.latitude ?? r.Latitude ?? r.lat);
         const lon = safeNum(r.longitude ?? r.Longitude ?? r.lon ?? r.lng);
 
+        const langList = parseLanguages(languages);
+
         return {
           id: r.objectid ?? r.id ?? i,
           school_name: school || `School ${i+1}`,
@@ -123,6 +133,7 @@
           calendar_type: calendar,
           bilingual_program: bilingual,
           languages_spoken: languages,
+          language_list: langList,
           latitude: lat,
           longitude: lon
         };
@@ -133,7 +144,7 @@
       const [board, setBoard] = React.useState("");
       const [calendar, setCalendar] = React.useState("");
       const [bilingual, setBilingual] = React.useState("");
-      const [language, setLanguage] = React.useState("");
+      const [selectedLanguages, setSelectedLanguages] = React.useState([]); // multi-select
       const [selected, setSelected] = React.useState(null);
 
       const levelOpts = uniq(rows.map(r => r.level));
@@ -141,14 +152,7 @@
       const calOpts = uniq(rows.map(r => r.calendar_type));
       const bilOpts = uniq(rows.map(r => r.bilingual_program));
 
-      const allLanguages = uniq(
-        rows.flatMap(r =>
-          (r.languages_spoken || "")
-            .split(/[,;|]/g)
-            .map(s => s.trim())
-            .filter(Boolean)
-        )
-      );
+      const allLanguages = uniq(rows.flatMap(r => r.language_list));
 
       const filtered = rows.filter(r => {
         const matchQ = !q || r.school_name.toLowerCase().includes(q.toLowerCase());
@@ -156,7 +160,11 @@
         const matchBoard = !board || r.board_district === board;
         const matchCal = !calendar || r.calendar_type === calendar;
         const matchBil = !bilingual || r.bilingual_program === bilingual;
-        const matchLang = !language || (r.languages_spoken || "").toLowerCase().includes(language.toLowerCase());
+
+        const matchLang =
+          selectedLanguages.length === 0 ||
+          selectedLanguages.some(L => r.language_list.includes(L));
+
         return matchQ && matchLevel && matchBoard && matchCal && matchBil && matchLang;
       });
 
@@ -166,24 +174,38 @@
         const v = (r.bilingual_program || "").toLowerCase();
         return v.includes("yes") || v.includes("dual") || v.includes("bilingual");
       }).length;
-      const uniqLangCount = uniq(filtered.flatMap(r => (r.languages_spoken||"").split(/[,;|]/g).map(s=>s.trim()).filter(Boolean))).length;
+      const uniqLangCount = uniq(filtered.flatMap(r => r.language_list)).length;
 
-      // Map init/update
+      // Map: keep within New Mexico bounds
       React.useEffect(() => {
         const mapEl = document.getElementById("map");
         if (!mapEl) return;
         if (!window.L) return;
 
+        // Approximate New Mexico bounding box
+        const nmBounds = window.L.latLngBounds(
+          [31.2, -109.1], // SW
+          [37.2, -103.0]  // NE
+        );
+
         if (!window.__SKB_MAP__) {
-          window.__SKB_MAP__ = window.L.map("map", { zoomControl: true }).setView([35.0844, -106.6504], 10);
+          window.__SKB_MAP__ = window.L.map("map", {
+            zoomControl: true,
+            maxBounds: nmBounds,
+            maxBoundsViscosity: 1.0
+          }).setView([34.5, -106.0], 6);
+
           window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
             maxZoom: 18,
             attribution: "&copy; OpenStreetMap contributors"
           }).addTo(window.__SKB_MAP__);
+
           window.__SKB_MARKERS__ = window.L.layerGroup().addTo(window.__SKB_MAP__);
         }
 
         const map = window.__SKB_MAP__;
+        map.setMaxBounds(nmBounds);
+
         const layer = window.__SKB_MARKERS__;
         layer.clearLayers();
 
@@ -203,11 +225,23 @@
           m.addTo(layer);
         });
 
+        // Fit to points, but never pan/zoom outside NM.
         if (pts.length) {
           const bounds = window.L.latLngBounds(pts.map(p => [p.latitude, p.longitude]));
-          map.fitBounds(bounds.pad(0.2));
+          map.fitBounds(bounds.pad(0.2), { maxZoom: 13 });
+        } else {
+          map.fitBounds(nmBounds, { maxZoom: 7 });
         }
-      }, [q, level, board, calendar, bilingual, language]);
+      }, [q, level, board, calendar, bilingual, selectedLanguages]);
+
+      function onLanguagesChange(e) {
+        const values = Array.from(e.target.selectedOptions).map(o => o.value).filter(Boolean);
+        setSelectedLanguages(values);
+      }
+
+      function clearLanguages() {
+        setSelectedLanguages([]);
+      }
 
       return el(React.Fragment, null,
         // Left sidebar
@@ -241,11 +275,16 @@
             bilOpts.map(v => el("option", { key:v, value:v }, v))
           ),
 
-          el("label", null, "Language contains"),
-          el("select", { value: language, onChange: e=>setLanguage(e.target.value) },
-            el("option", { value: "" }, "All"),
-            allLanguages.slice(0, 300).map(v => el("option", { key:v, value:v }, v))
+          el("label", null, "Languages (multi-select)"),
+          el("select", {
+              multiple: true,
+              value: selectedLanguages,
+              onChange: onLanguagesChange
+            },
+            allLanguages.slice(0, 600).map(v => el("option", { key:v, value:v }, v))
           ),
+          el("div", { className:"hint" }, "Tip: hold Ctrl (Windows) / Cmd (Mac) to select multiple."),
+          el("button", { className:"secondary", onClick: clearLanguages }, "Clear languages"),
 
           el("button", { onClick: ()=>downloadCSV(filtered.map(r => ({
             school_name: r.school_name,
@@ -262,7 +301,7 @@
           el("button", { className:"secondary", onClick: ()=>window.print() }, "Print / Save as PDF"),
 
           el("div", { className:"muted", style:{marginTop:10} },
-            "Tip: Click a map point or table row to select a school."
+            "Map is constrained to New Mexico bounds."
           )
         ),
 
