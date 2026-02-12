@@ -74,6 +74,21 @@
         .filter(Boolean);
     }
 
+    // NEW: normalize NM coordinates and drop out-of-state points
+    function normalizeNmCoords(lat, lon) {
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return { lat: null, lon: null, ok: false };
+
+      // If longitude is accidentally positive (e.g., 106 instead of -106), flip it.
+      // New Mexico longitudes are roughly -109 to -103.
+      if (lon > 0 && lon >= 100 && lon <= 115 && lat >= 25 && lat <= 45) {
+        lon = -lon;
+      }
+
+      // Keep only points within an NM-ish bounding box (a little padded)
+      const withinNm = (lat >= 31.0 && lat <= 37.5 && lon >= -109.5 && lon <= -102.5);
+      return { lat, lon, ok: withinNm };
+    }
+
     function downloadCSV(rows, filename="schools_filtered.csv") {
       const headers = Object.keys(rows[0] || {});
       const esc = (v) => `"${String(v ?? "").replaceAll('"','""')}"`;
@@ -103,8 +118,6 @@
     }
 
     function App({ raw }) {
-      // Column mapping aligned to your data.json keys:
-      // school_name, level, enrollment, bilingual_education_program, calendar, school_board_district, home_language_other_than_english, latitude, longitude
       const rows = raw.map((r, i) => {
         const school = toStr(r.school_name ?? r.School ?? r["School Name"] ?? r.name ?? r["Name"]);
         const level = toStr(r.level ?? r.Level ?? r["School Level"]);
@@ -119,8 +132,10 @@
         const languages = toStr(
           r.home_language_other_than_english ?? r.languages_spoken ?? r.languages ?? r["Languages Spoken"] ?? r["Student Languages"]
         );
-        const lat = safeNum(r.latitude ?? r.Latitude ?? r.lat);
-        const lon = safeNum(r.longitude ?? r.Longitude ?? r.lon ?? r.lng);
+
+        const lat0 = safeNum(r.latitude ?? r.Latitude ?? r.lat);
+        const lon0 = safeNum(r.longitude ?? r.Longitude ?? r.lon ?? r.lng);
+        const norm = normalizeNmCoords(lat0, lon0);
 
         const langList = parseLanguages(languages);
 
@@ -134,8 +149,9 @@
           bilingual_program: bilingual,
           languages_spoken: languages,
           language_list: langList,
-          latitude: lat,
-          longitude: lon
+          latitude: norm.lat,
+          longitude: norm.lon,
+          in_nm: norm.ok
         };
       });
 
@@ -144,14 +160,13 @@
       const [board, setBoard] = React.useState("");
       const [calendar, setCalendar] = React.useState("");
       const [bilingual, setBilingual] = React.useState("");
-      const [selectedLanguages, setSelectedLanguages] = React.useState([]); // multi-select
+      const [selectedLanguages, setSelectedLanguages] = React.useState([]);
       const [selected, setSelected] = React.useState(null);
 
       const levelOpts = uniq(rows.map(r => r.level));
       const boardOpts = uniq(rows.map(r => r.board_district));
       const calOpts = uniq(rows.map(r => r.calendar_type));
       const bilOpts = uniq(rows.map(r => r.bilingual_program));
-
       const allLanguages = uniq(rows.flatMap(r => r.language_list));
 
       const filtered = rows.filter(r => {
@@ -160,11 +175,7 @@
         const matchBoard = !board || r.board_district === board;
         const matchCal = !calendar || r.calendar_type === calendar;
         const matchBil = !bilingual || r.bilingual_program === bilingual;
-
-        const matchLang =
-          selectedLanguages.length === 0 ||
-          selectedLanguages.some(L => r.language_list.includes(L));
-
+        const matchLang = selectedLanguages.length === 0 || selectedLanguages.some(L => r.language_list.includes(L));
         return matchQ && matchLevel && matchBoard && matchCal && matchBil && matchLang;
       });
 
@@ -176,23 +187,20 @@
       }).length;
       const uniqLangCount = uniq(filtered.flatMap(r => r.language_list)).length;
 
-      // Map: keep within New Mexico bounds
+      // Map: hard constrain to NM + only plot points inside NM
       React.useEffect(() => {
         const mapEl = document.getElementById("map");
         if (!mapEl) return;
         if (!window.L) return;
 
-        // Approximate New Mexico bounding box
-        const nmBounds = window.L.latLngBounds(
-          [31.2, -109.1], // SW
-          [37.2, -103.0]  // NE
-        );
+        const nmBounds = window.L.latLngBounds([31.2, -109.1], [37.2, -103.0]);
 
         if (!window.__SKB_MAP__) {
           window.__SKB_MAP__ = window.L.map("map", {
             zoomControl: true,
             maxBounds: nmBounds,
-            maxBoundsViscosity: 1.0
+            maxBoundsViscosity: 1.0,
+            minZoom: 5
           }).setView([34.5, -106.0], 6);
 
           window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -209,7 +217,9 @@
         const layer = window.__SKB_MARKERS__;
         layer.clearLayers();
 
-        const pts = filtered.filter(r => Number.isFinite(r.latitude) && Number.isFinite(r.longitude));
+        // Only keep points that are within NM after normalization
+        const pts = filtered.filter(r => r.in_nm && Number.isFinite(r.latitude) && Number.isFinite(r.longitude));
+
         pts.forEach(r => {
           const m = window.L.circleMarker([r.latitude, r.longitude], { radius: 6, weight: 1, fillOpacity: 0.7 });
           m.bindPopup(
@@ -225,26 +235,27 @@
           m.addTo(layer);
         });
 
-        // Fit to points, but never pan/zoom outside NM.
+        // Fit to NM-safe point bounds; otherwise keep NM statewide view.
         if (pts.length) {
           const bounds = window.L.latLngBounds(pts.map(p => [p.latitude, p.longitude]));
           map.fitBounds(bounds.pad(0.2), { maxZoom: 13 });
         } else {
           map.fitBounds(nmBounds, { maxZoom: 7 });
         }
+
+        // Safety: if anything tries to move outside NM, pull it back.
+        map.on("drag", () => map.panInsideBounds(nmBounds, { animate: false }));
       }, [q, level, board, calendar, bilingual, selectedLanguages]);
 
       function onLanguagesChange(e) {
         const values = Array.from(e.target.selectedOptions).map(o => o.value).filter(Boolean);
         setSelectedLanguages(values);
       }
-
       function clearLanguages() {
         setSelectedLanguages([]);
       }
 
       return el(React.Fragment, null,
-        // Left sidebar
         el("div", { className: "card" },
           el("div", { style: { fontWeight: 700 } }, "Filters"),
 
@@ -276,14 +287,10 @@
           ),
 
           el("label", null, "Languages (multi-select)"),
-          el("select", {
-              multiple: true,
-              value: selectedLanguages,
-              onChange: onLanguagesChange
-            },
+          el("select", { multiple: true, value: selectedLanguages, onChange: onLanguagesChange },
             allLanguages.slice(0, 600).map(v => el("option", { key:v, value:v }, v))
           ),
-          el("div", { className:"hint" }, "Tip: hold Ctrl (Windows) / Cmd (Mac) to select multiple."),
+          el("div", { className:"hint" }, "Hold Ctrl (Windows) / Cmd (Mac) to select multiple."),
           el("button", { className:"secondary", onClick: clearLanguages }, "Clear languages"),
 
           el("button", { onClick: ()=>downloadCSV(filtered.map(r => ({
@@ -301,11 +308,10 @@
           el("button", { className:"secondary", onClick: ()=>window.print() }, "Print / Save as PDF"),
 
           el("div", { className:"muted", style:{marginTop:10} },
-            "Map is constrained to New Mexico bounds."
+            "Map is locked to New Mexico."
           )
         ),
 
-        // Main content
         el("div", null,
           el("div", { className:"card" },
             el("div", { className:"kpis" },
