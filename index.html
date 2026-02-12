@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>School Information Dashboard</title>
+
+  <!-- React (UMD) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Babel for in-browser JSX (fine for smaller public embeds). For high-traffic, build with Vite (instructions below). -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- D3 -->
+  <script src="https://unpkg.com/d3@7/dist/d3.min.js"></script>
+
+  <!-- Leaflet (map) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    :root{
+      --bg:#ffffff;
+      --fg:#0f172a;
+      --muted:#475569;
+      --border:#e2e8f0;
+      --card:#ffffff;
+      --shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+      --radius: 16px;
+      --pad: 14px;
+      --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+    html, body { height:100%; background:var(--bg); color:var(--fg); font-family:var(--font); }
+    body { margin:0; }
+    a{ color:inherit; }
+    .app{
+      display:grid;
+      grid-template-columns: 330px 1fr;
+      gap: 14px;
+      padding: 14px;
+      max-width: 1400px;
+      margin: 0 auto;
+      box-sizing: border-box;
+    }
+    @media (max-width: 980px){
+      .app{ grid-template-columns: 1fr; }
+    }
+    .panel, .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .panel{ padding: 14px; position: sticky; top: 10px; height: fit-content; }
+    .title{ font-size: 18px; font-weight: 700; margin: 0 0 8px 0;}
+    .sub{ font-size: 12px; color:var(--muted); margin: 0 0 12px 0;}
+    .field{ margin-bottom: 12px; }
+    label{ display:block; font-size: 12px; color: var(--muted); margin-bottom: 6px;}
+    input[type="text"], select{
+      width:100%;
+      padding: 10px 10px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 14px;
+      box-sizing: border-box;
+      outline: none;
+      background: #fff;
+    }
+    .row{ display:flex; gap:10px; }
+    .row > * { flex:1; }
+    .chips{
+      display:flex; flex-wrap: wrap; gap: 6px;
+      max-height: 140px; overflow:auto;
+      border:1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px;
+      background: #fff;
+    }
+    .chip{
+      border:1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      user-select:none;
+      background: #fff;
+    }
+    .chip.on{ border-color:#0f172a; background:#0f172a; color:#fff; }
+    .btnrow{ display:flex; gap:10px; flex-wrap: wrap; margin-top: 8px;}
+    button{
+      border:1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background:#fff;
+      cursor:pointer;
+      font-weight: 600;
+      font-size: 13px;
+    }
+    button.primary{ background:#0f172a; border-color:#0f172a; color:#fff; }
+    button:disabled{ opacity:.6; cursor:not-allowed; }
+    .main{
+      display:flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 0;
+    }
+    .header{
+      display:flex; align-items: baseline; justify-content: space-between;
+      padding: 14px;
+    }
+    .header h1{ margin:0; font-size: 20px; }
+    .header .meta{ font-size: 12px; color:var(--muted); }
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 1200px){ .grid{ grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 650px){ .grid{ grid-template-columns: 1fr; } }
+    .kpi{ padding: 14px; }
+    .kpi .k{ font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .kpi .v{ font-size: 22px; font-weight: 800; }
+    .kpi .s{ font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .two{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 980px){ .two{ grid-template-columns: 1fr; } }
+    .card{ padding: 14px; min-width:0; }
+    .card h2{ margin:0 0 8px 0; font-size: 15px; }
+    .card .note{ margin:0 0 10px 0; font-size: 12px; color:var(--muted); }
+    .chart{ width:100%; height: 290px; }
+    #map{ height: 420px; border-radius: 14px; overflow:hidden; border: 1px solid var(--border); }
+    .tablewrap{ overflow:auto; border:1px solid var(--border); border-radius: 14px; }
+    table{ width:100%; border-collapse: collapse; font-size: 13px; }
+    th, td{ padding: 10px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th{ position: sticky; top: 0; background: #fff; z-index:1; text-align:left; font-size: 12px; color: var(--muted); }
+    tr:hover td{ background: #f8fafc; }
+    .pill{
+      display:inline-block;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      margin-right: 6px;
+      margin-bottom: 6px;
+      background: #fff;
+      white-space: nowrap;
+    }
+    .modalback{
+      position: fixed; inset:0; background: rgba(15,23,42,.55);
+      display:flex; align-items:center; justify-content:center;
+      padding: 18px;
+      z-index: 9999;
+    }
+    .modal{
+      width: min(820px, 100%);
+      background:#fff;
+      border-radius: 18px;
+      border:1px solid var(--border);
+      box-shadow: 0 20px 60px rgba(0,0,0,.25);
+      overflow:hidden;
+    }
+    .modalheader{
+      padding: 14px;
+      display:flex; align-items:center; justify-content: space-between;
+      border-bottom:1px solid var(--border);
+    }
+    .modalheader h3{ margin:0; font-size: 16px; }
+    .modalbody{ padding: 14px; }
+    .profilegrid{ display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 650px){ .profilegrid{ grid-template-columns: 1fr; } }
+    .profilegrid .item{ border:1px solid var(--border); border-radius: 14px; padding: 12px; }
+    .printnote{ font-size:12px; color:var(--muted); margin: 10px 0 0 0; }
+    @media print{
+      body { background:#fff; }
+      .panel, .header, .btnrow, #map, .tablewrap, .chart { display:none !important; }
+      .modalback{ position: static; background: none; padding: 0; }
+      .modal{ width: 100%; box-shadow:none; border:none; border-radius:0; }
+      .modalheader{ border: none; padding: 0 0 10px 0; }
+      button{ display:none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useEffect, useMemo, useRef, useState } = React;
+
+    // --- Helpers ---
+    const fmtInt = (n) => (n ?? 0).toLocaleString();
+    const uniq = (arr) => Array.from(new Set(arr)).filter(Boolean);
+    const yesNo = (v) => (String(v).toLowerCase() === "yes" ? "Yes" : (String(v).toLowerCase()==="no" ? "No" : (v ?? "")));
+
+    function downloadText(filename, text, mime="text/plain;charset=utf-8"){
+      const blob = new Blob([text], {type:mime});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 1500);
+    }
+
+    function toCSV(rows){
+      if(!rows?.length) return "";
+      const cols = Object.keys(rows[0]);
+      const esc = (v) => {
+        const s = (v === null || v === undefined) ? "" : String(v);
+        return /[",\n]/.test(s) ? `"${s.replaceAll('"','""')}"` : s;
+      };
+      const header = cols.join(",");
+      const body = rows.map(r => cols.map(c => esc(Array.isArray(r[c]) ? r[c].join("; ") : r[c])).join(",")).join("\n");
+      return header + "\n" + body;
+    }
+
+    // --- D3 chart hooks ---
+    function useBarChart(ref, data, {xKey, yKey, titleKey, height=290, topN=20}){
+      useEffect(()=>{
+        const el = ref.current;
+        if(!el) return;
+        el.innerHTML = "";
+        const width = el.clientWidth || 600;
+        const margin = {top: 10, right: 10, bottom: 24, left: 170};
+        const h = height;
+        const svg = d3.select(el).append("svg").attr("width", width).attr("height", h);
+
+        const sorted = [...(data||[])].sort((a,b)=> (b[yKey]||0) - (a[yKey]||0)).slice(0, topN);
+        const x = d3.scaleLinear()
+          .domain([0, d3.max(sorted, d=>d[yKey]||0) || 1])
+          .range([margin.left, width - margin.right]);
+
+        const y = d3.scaleBand()
+          .domain(sorted.map(d=>d[xKey]))
+          .range([margin.top, h - margin.bottom])
+          .padding(0.2);
+
+        svg.append("g")
+          .attr("transform", `translate(0,${h-margin.bottom})`)
+          .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format("~s")))
+          .call(g => g.select(".domain").attr("stroke","#cbd5e1"))
+          .call(g => g.selectAll("text").attr("fill","#475569"));
+
+        svg.append("g")
+          .attr("transform", `translate(${margin.left},0)`)
+          .call(d3.axisLeft(y).tickSize(0))
+          .call(g => g.select(".domain").remove())
+          .call(g => g.selectAll("text").attr("fill","#0f172a").style("font-size","11px"));
+
+        // bars
+        svg.append("g")
+          .selectAll("rect")
+          .data(sorted)
+          .join("rect")
+          .attr("x", x(0))
+          .attr("y", d=>y(d[xKey]))
+          .attr("height", y.bandwidth())
+          .attr("width", d=>x(d[yKey]||0) - x(0))
+          .attr("rx", 6)
+          .attr("fill", "#0f172a");
+
+        // tooltip
+        const tip = d3.select(el).append("div")
+          .style("position","absolute")
+          .style("pointer-events","none")
+          .style("opacity",0)
+          .style("background","#0f172a")
+          .style("color","#fff")
+          .style("padding","8px 10px")
+          .style("border-radius","10px")
+          .style("font-size","12px")
+          .style("transform","translate(10px,-10px)");
+
+        svg.selectAll("rect")
+          .on("mousemove", (event, d)=>{
+            tip.style("opacity",1)
+              .style("left", (event.offsetX + 10) + "px")
+              .style("top", (event.offsetY + 10) + "px")
+              .html(`<div style="font-weight:700;margin-bottom:2px;">${d[titleKey] ?? d[xKey]}</div>
+                <div>${yKey}: ${fmtInt(d[yKey])}</div>`);
+          })
+          .on("mouseout", ()=> tip.style("opacity",0));
+
+      }, [ref, data, xKey, yKey, titleKey, height, topN]);
+    }
+
+    function useDonut(ref, data, {labelKey, valueKey, height=290}){
+      useEffect(()=>{
+        const el = ref.current;
+        if(!el) return;
+        el.innerHTML = "";
+        const width = el.clientWidth || 500;
+        const h = height;
+        const r = Math.min(width, h) / 2 - 14;
+
+        const svg = d3.select(el).append("svg").attr("width", width).attr("height", h);
+        const g = svg.append("g").attr("transform", `translate(${width/2},${h/2})`);
+
+        const clean = (data||[]).filter(d=> (d[valueKey]||0) > 0);
+        const total = d3.sum(clean, d=>d[valueKey]) || 1;
+
+        const pie = d3.pie().value(d=>d[valueKey]).sort(null);
+        const arc = d3.arc().innerRadius(r*0.62).outerRadius(r);
+
+        const color = d3.scaleOrdinal()
+          .domain(clean.map(d=>d[labelKey]))
+          .range(["#0f172a","#334155","#64748b","#94a3b8","#cbd5e1"]);
+
+        g.selectAll("path")
+          .data(pie(clean))
+          .join("path")
+          .attr("d", arc)
+          .attr("fill", d=>color(d.data[labelKey]))
+          .attr("stroke","#fff")
+          .attr("stroke-width", 2);
+
+        g.append("text")
+          .attr("text-anchor","middle")
+          .attr("dy","-0.1em")
+          .style("font-size","22px")
+          .style("font-weight","800")
+          .text(d3.format(",")(total));
+
+        g.append("text")
+          .attr("text-anchor","middle")
+          .attr("dy","1.3em")
+          .style("font-size","12px")
+          .style("fill","#475569")
+          .text("items");
+
+        // legend
+        const legend = svg.append("g").attr("transform", `translate(14,14)`);
+        const rows = legend.selectAll("g")
+          .data(clean)
+          .join("g")
+          .attr("transform",(d,i)=>`translate(0,${i*18})`);
+        rows.append("rect").attr("width",10).attr("height",10).attr("rx",2).attr("fill", d=>color(d[labelKey]));
+        rows.append("text").attr("x",14).attr("y",9).style("font-size","12px").style("fill","#475569")
+          .text(d=>`${d[labelKey]} (${d3.format(".0%")((d[valueKey]||0)/total)})`);
+      }, [ref, data, labelKey, valueKey, height]);
+    }
+
+    // --- Leaflet Map ---
+    function Map({rows, selected, onSelect}){
+      const mapRef = useRef(null);
+      const layerRef = useRef(null);
+
+      useEffect(()=>{
+        if(mapRef.current) return;
+        const map = L.map("map", { zoomControl: true, scrollWheelZoom: false });
+        mapRef.current = map;
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: '&copy; OpenStreetMap'
+        }).addTo(map);
+
+        layerRef.current = L.layerGroup().addTo(map);
+      }, []);
+
+      useEffect(()=>{
+        const map = mapRef.current;
+        const layer = layerRef.current;
+        if(!map || !layer) return;
+
+        layer.clearLayers();
+
+        const pts = (rows||[])
+          .filter(r => Number.isFinite(+r.latitude) && Number.isFinite(+r.longitude))
+          .map(r => ({
+            ...r,
+            lat: +r.latitude,
+            lon: +r.longitude
+          }));
+
+        pts.forEach(r=>{
+          const isSel = selected && selected.school_name === r.school_name;
+          const marker = L.circleMarker([r.lat, r.lon], {
+            radius: Math.max(5, Math.min(12, Math.sqrt((r.enrollment||0)/100))),
+            color: isSel ? "#0f172a" : "#475569",
+            weight: isSel ? 3 : 2,
+            fillColor: isSel ? "#0f172a" : "#94a3b8",
+            fillOpacity: 0.85
+          });
+
+          marker.bindTooltip(
+            `<b>${r.school_name}</b><br/>
+             Enrollment: ${fmtInt(r.enrollment)}<br/>
+             Board: ${r.school_board_district ?? ""}<br/>
+             Bilingual: ${yesNo(r.bilingual_education_program)}<br/>
+             Calendar: ${r.calendar ?? ""}`,
+            {sticky:true}
+          );
+
+          marker.on("click", ()=> onSelect?.(r));
+          marker.addTo(layer);
+        });
+
+        if(pts.length){
+          const bounds = L.latLngBounds(pts.map(p=>[p.lat,p.lon]));
+          map.fitBounds(bounds.pad(0.08));
+        }
+      }, [rows, selected]);
+
+      return <div id="map" />;
+    }
+
+    function SchoolProfileModal({school, onClose}){
+      if(!school) return null;
+      const langs = (school.languages || []).slice().sort();
+      return (
+        <div className="modalback" onMouseDown={(e)=>{ if(e.target.classList.contains("modalback")) onClose(); }}>
+          <div className="modal">
+            <div className="modalheader">
+              <h3>{school.school_name}</h3>
+              <div style={{display:"flex", gap:10}}>
+                <button onClick={()=>window.print()} className="primary">Print / Save as PDF</button>
+                <button onClick={onClose}>Close</button>
+              </div>
+            </div>
+            <div className="modalbody">
+              <div className="profilegrid">
+                <div className="item"><div style={{fontSize:12,color:"#475569"}}>Enrollment</div><div style={{fontSize:20,fontWeight:800}}>{fmtInt(school.enrollment)}</div></div>
+                <div className="item"><div style={{fontSize:12,color:"#475569"}}>Level</div><div style={{fontSize:16,fontWeight:700}}>{school.level ?? ""}</div></div>
+                <div className="item"><div style={{fontSize:12,color:"#475569"}}>Bilingual Education Program</div><div style={{fontSize:16,fontWeight:700}}>{yesNo(school.bilingual_education_program)}</div></div>
+                <div className="item"><div style={{fontSize:12,color:"#475569"}}>Calendar Type</div><div style={{fontSize:16,fontWeight:700}}>{school.calendar ?? ""}</div></div>
+                <div className="item"><div style={{fontSize:12,color:"#475569"}}>School Board District</div><div style={{fontSize:16,fontWeight:700}}>{school.school_board_district ?? ""}</div></div>
+                <div className="item"><div style={{fontSize:12,color:"#475569"}}>ABC Community School</div><div style={{fontSize:16,fontWeight:700}}>{yesNo(school.abc_community_school)}</div></div>
+              </div>
+
+              <div style={{marginTop:12}}>
+                <div style={{fontSize:12,color:"#475569", marginBottom:8}}>Languages spoken by students (home language other than English)</div>
+                <div>
+                  {langs.length ? langs.map(l => <span key={l} className="pill">{l}</span>) : <span className="pill">None listed</span>}
+                </div>
+              </div>
+
+              <p className="printnote">Tip: In the print dialog, choose “Save as PDF” to export a one-page school profile.</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function App(){
+      const [allRows, setAllRows] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [err, setErr] = useState("");
+      const [selectedSchool, setSelectedSchool] = useState(null);
+
+      // Filters
+      const [q, setQ] = useState("");
+      const [level, setLevel] = useState("All");
+      const [board, setBoard] = useState("All");
+      const [calendar, setCalendar] = useState("All");
+      const [bilingual, setBilingual] = useState("All");
+      const [langSet, setLangSet] = useState(new Set());
+
+      useEffect(()=>{
+        // Load local JSON (place data.json in the same folder)
+        fetch("data.json", {cache:"no-store"})
+          .then(r=> r.ok ? r.json() : Promise.reject(new Error("Could not load data.json")))
+          .then(data=>{
+            setAllRows(data || []);
+            setLoading(false);
+          })
+          .catch(e=>{
+            setErr(String(e?.message || e));
+            setLoading(false);
+          });
+      }, []);
+
+      const levels = useMemo(()=> ["All", ...uniq(allRows.map(r=>r.level)).sort()], [allRows]);
+      const boards = useMemo(()=> ["All", ...uniq(allRows.map(r=>r.school_board_district)).sort()], [allRows]);
+      const calendars = useMemo(()=> ["All", ...uniq(allRows.map(r=>r.calendar)).sort()], [allRows]);
+      const languages = useMemo(()=> {
+        const all = [];
+        allRows.forEach(r => (r.languages||[]).forEach(l => all.push(l)));
+        return uniq(all).sort((a,b)=>a.localeCompare(b));
+      }, [allRows]);
+
+      const filtered = useMemo(()=>{
+        const qq = q.trim().toLowerCase();
+        const wantLangs = Array.from(langSet);
+        return allRows.filter(r=>{
+          if(qq && !String(r.school_name||"").toLowerCase().includes(qq)) return false;
+          if(level !== "All" && String(r.level) !== level) return false;
+          if(board !== "All" && String(r.school_board_district) !== board) return false;
+          if(calendar !== "All" && String(r.calendar) !== calendar) return false;
+          if(bilingual !== "All" && yesNo(r.bilingual_education_program) !== bilingual) return false;
+          if(wantLangs.length){
+            const set = new Set((r.languages||[]).map(x=>String(x)));
+            for(const l of wantLangs){
+              if(!set.has(l)) return false; // AND filter (all selected must be present)
+            }
+          }
+          return true;
+        });
+      }, [allRows, q, level, board, calendar, bilingual, langSet]);
+
+      // KPIs
+      const totalSchools = filtered.length;
+      const totalEnroll = useMemo(()=> d3.sum(filtered, d=> +d.enrollment || 0), [filtered]);
+
+      const bilingualCount = useMemo(()=> filtered.filter(r=>yesNo(r.bilingual_education_program)==="Yes").length, [filtered]);
+
+      const uniqueLangCount = useMemo(()=>{
+        const s = new Set();
+        filtered.forEach(r => (r.languages||[]).forEach(l=>s.add(l)));
+        return s.size;
+      }, [filtered]);
+
+      // Chart datasets
+      const enrollData = useMemo(()=> filtered.map(r=>({name:r.school_name, enrollment:+r.enrollment||0, school_name:r.school_name})), [filtered]);
+
+      const donutBilingual = useMemo(()=>{
+        const yes = filtered.filter(r=>yesNo(r.bilingual_education_program)==="Yes").length;
+        const no = filtered.filter(r=>yesNo(r.bilingual_education_program)==="No").length;
+        const other = Math.max(0, filtered.length - yes - no);
+        return [
+          {label:"Yes", value: yes},
+          {label:"No", value: no},
+          ...(other ? [{label:"Other/Blank", value: other}] : [])
+        ];
+      }, [filtered]);
+
+      const donutCalendar = useMemo(()=>{
+        const counts = d3.rollups(filtered, v=>v.length, d=>String(d.calendar||"Unknown"));
+        return counts
+          .map(([k,v])=>({label:k, value:v}))
+          .sort((a,b)=>b.value-a.value)
+          .slice(0,6); // keep legend readable
+      }, [filtered]);
+
+      const langBars = useMemo(()=>{
+        const m = new Map();
+        filtered.forEach(r=>{
+          (r.languages||[]).forEach(l=>{
+            m.set(l, (m.get(l)||0) + 1);
+          });
+        });
+        return Array.from(m.entries())
+          .map(([language, schools])=>({language, schools}))
+          .sort((a,b)=>b.schools-a.schools)
+          .slice(0,15);
+      }, [filtered]);
+
+      // D3 render
+      const enrollRef = useRef(null);
+      const bilingualRef = useRef(null);
+      const calendarRef = useRef(null);
+      const langRef = useRef(null);
+
+      useBarChart(enrollRef, enrollData, {xKey:"name", yKey:"enrollment", titleKey:"school_name", height:290, topN:20});
+      useDonut(bilingualRef, donutBilingual, {labelKey:"label", valueKey:"value", height:290});
+      useDonut(calendarRef, donutCalendar, {labelKey:"label", valueKey:"value", height:290});
+      useBarChart(langRef, langBars, {xKey:"language", yKey:"schools", titleKey:"language", height:290, topN:15});
+
+      const toggleLang = (l) => {
+        setLangSet(prev=>{
+          const n = new Set(prev);
+          if(n.has(l)) n.delete(l); else n.add(l);
+          return n;
+        });
+      };
+
+      const clearFilters = () => {
+        setQ(""); setLevel("All"); setBoard("All"); setCalendar("All"); setBilingual("All"); setLangSet(new Set());
+      };
+
+      const exportCSV = () => {
+        const rows = filtered.map(r=>({
+          school_name: r.school_name,
+          level: r.level,
+          enrollment: r.enrollment,
+          bilingual_education_program: yesNo(r.bilingual_education_program),
+          calendar: r.calendar,
+          school_board_district: r.school_board_district,
+          languages: (r.languages||[]).join("; "),
+          latitude: r.latitude,
+          longitude: r.longitude
+        }));
+        downloadText("school_dashboard_export.csv", toCSV(rows), "text/csv;charset=utf-8");
+      };
+
+      const exportSchoolProfile = () => {
+        if(!selectedSchool) return;
+        setTimeout(()=>window.print(), 50);
+      };
+
+      // Keep selectedSchool valid after filtering
+      useEffect(()=>{
+        if(selectedSchool && !filtered.some(r=>r.school_name===selectedSchool.school_name)){
+          setSelectedSchool(null);
+        }
+      }, [filtered]);
+
+      return (
+        <div className="app">
+          <div className="panel">
+            <div className="title">Filters</div>
+            <div className="sub">Filter schools and export reports.</div>
+
+            <div className="field">
+              <label>Search School</label>
+              <input type="text" value={q} onChange={e=>setQ(e.target.value)} placeholder="Type a school name..." />
+            </div>
+
+            <div className="row">
+              <div className="field">
+                <label>Level</label>
+                <select value={level} onChange={e=>setLevel(e.target.value)}>
+                  {levels.map(v=><option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label>Bilingual Program</label>
+                <select value={bilingual} onChange={e=>setBilingual(e.target.value)}>
+                  {["All","Yes","No"].map(v=><option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="field">
+              <label>Calendar Type</label>
+              <select value={calendar} onChange={e=>setCalendar(e.target.value)}>
+                {calendars.map(v=><option key={v} value={v}>{v}</option>)}
+              </select>
+            </div>
+
+            <div className="field">
+              <label>School Board District</label>
+              <select value={board} onChange={e=>setBoard(e.target.value)}>
+                {boards.map(v=><option key={v} value={v}>{v}</option>)}
+              </select>
+            </div>
+
+            <div className="field">
+              <label>Languages (AND filter: all selected must be present)</label>
+              <div className="chips" role="list">
+                {languages.map(l=>(
+                  <div key={l} className={"chip " + (langSet.has(l) ? "on":"")} onClick={()=>toggleLang(l)} title={l}>
+                    {l}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="btnrow">
+              <button onClick={clearFilters}>Reset</button>
+              <button className="primary" onClick={exportCSV} disabled={!filtered.length}>Download CSV</button>
+              <button onClick={()=> setSelectedSchool(null)} disabled={!selectedSchool}>Clear Selection</button>
+            </div>
+
+            <div style={{marginTop:12, fontSize:12, color:"#475569"}}>
+              <div><b>Tip:</b> Click a marker on the map (or a row in the table) to open a one-page school profile.</div>
+              <div style={{marginTop:8}}><b>Data source:</b> data.json in the same folder as this HTML.</div>
+            </div>
+          </div>
+
+          <div className="main">
+            <div className="card header">
+              <div>
+                <h1>School Information Dashboard</h1>
+                <div className="meta">
+                  {loading ? "Loading data..." : (err ? `Error: ${err}` : `${fmtInt(totalSchools)} schools shown • ${fmtInt(totalEnroll)} total enrollment`)}
+                </div>
+              </div>
+              <div className="meta">
+                {selectedSchool ? <span><b>Selected:</b> {selectedSchool.school_name}</span> : "No school selected"}
+              </div>
+            </div>
+
+            <div className="grid">
+              <div className="card kpi">
+                <div className="k">Schools</div>
+                <div className="v">{fmtInt(totalSchools)}</div>
+                <div className="s">Filter-aware count</div>
+              </div>
+              <div className="card kpi">
+                <div className="k">Total Enrollment</div>
+                <div className="v">{fmtInt(totalEnroll)}</div>
+                <div className="s">Sum of enrollments</div>
+              </div>
+              <div className="card kpi">
+                <div className="k">Bilingual Programs</div>
+                <div className="v">{fmtInt(bilingualCount)}</div>
+                <div className="s">Schools reporting “Yes”</div>
+              </div>
+              <div className="card kpi">
+                <div className="k">Unique Languages</div>
+                <div className="v">{fmtInt(uniqueLangCount)}</div>
+                <div className="s">Across filtered schools</div>
+              </div>
+            </div>
+
+            <div className="two">
+              <div className="card">
+                <h2>Top Enrollments</h2>
+                <p className="note">Top 20 schools by enrollment (filtered).</p>
+                <div className="chart" ref={enrollRef}></div>
+              </div>
+              <div className="card">
+                <h2>Bilingual Education Program</h2>
+                <p className="note">Distribution for filtered schools.</p>
+                <div className="chart" ref={bilingualRef}></div>
+              </div>
+            </div>
+
+            <div className="two">
+              <div className="card">
+                <h2>Calendar Types</h2>
+                <p className="note">Top categories shown (to keep legend readable).</p>
+                <div className="chart" ref={calendarRef}></div>
+              </div>
+              <div className="card">
+                <h2>Languages Spoken</h2>
+                <p className="note">Top 15 by number of schools where the language appears.</p>
+                <div className="chart" ref={langRef}></div>
+              </div>
+            </div>
+
+            <div className="card">
+              <h2>Map of Schools</h2>
+              <p className="note">Circle size scales with enrollment. Click a point to select a school.</p>
+              <Map rows={filtered} selected={selectedSchool} onSelect={setSelectedSchool} />
+            </div>
+
+            <div className="card">
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"baseline", gap:10}}>
+                <div>
+                  <h2 style={{marginBottom:4}}>School List</h2>
+                  <p className="note">Click a row to open the school profile (print to PDF).</p>
+                </div>
+                <div style={{display:"flex", gap:10, flexWrap:"wrap"}}>
+                  <button className="primary" onClick={()=> setSelectedSchool(selectedSchool)} disabled={!selectedSchool}>Open Profile</button>
+                  <button onClick={exportSchoolProfile} disabled={!selectedSchool}>Print Selected</button>
+                </div>
+              </div>
+
+              <div className="tablewrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>School</th>
+                      <th>Level</th>
+                      <th>Enrollment</th>
+                      <th>Bilingual</th>
+                      <th>Calendar</th>
+                      <th>Board District</th>
+                      <th>Languages</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered
+                      .slice()
+                      .sort((a,b)=> (b.enrollment||0)-(a.enrollment||0))
+                      .map(r=>{
+                        const isSel = selectedSchool?.school_name === r.school_name;
+                        const langs = (r.languages||[]).slice(0,6);
+                        return (
+                          <tr key={r.school_name}
+                              style={{cursor:"pointer"}}
+                              onClick={()=>setSelectedSchool(r)}>
+                            <td style={{fontWeight:isSel?800:600}}>{r.school_name}</td>
+                            <td>{r.level ?? ""}</td>
+                            <td>{fmtInt(r.enrollment)}</td>
+                            <td>{yesNo(r.bilingual_education_program)}</td>
+                            <td>{r.calendar ?? ""}</td>
+                            <td>{r.school_board_district ?? ""}</td>
+                            <td>
+                              {langs.map(l=><span key={l} className="pill">{l}</span>)}
+                              {(r.languages||[]).length > 6 ? <span className="pill">+{(r.languages||[]).length-6} more</span> : null}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    {!filtered.length && !loading && !err ? (
+                      <tr><td colSpan="7" style={{color:"#475569"}}>No schools match the current filters.</td></tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <SchoolProfileModal school={selectedSchool} onClose={()=>setSelectedSchool(null)} />
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
